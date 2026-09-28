@@ -1,0 +1,19 @@
+{
+  "name": "Les Brocanteurs",
+  "short_name": "Brocanteurs",
+  "description": "Estimez des objets en groupe et participez au défi photo du jour.",
+  "lang": "fr",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f2f0e8",
+  "theme_color": "#294b3e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/brocanteurs.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

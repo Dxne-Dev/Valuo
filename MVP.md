@@ -1,14 +1,24 @@
-Cahier des charges — Application "Les Brocanteurs"
-Version : 1.0 — MVP Date : Septembre 2026 Statut : Document vivant, à faire évoluer au fil des phases de scale
+# Cahier des charges — Application "VALUO"
+**Version :** 1.0 — MVP | **Nom de code :** VALUO | **Date :** Septembre 2026 | **Statut :** Document vivant
 
-1. Contexte et vision produit
-1.1 Concept
-Application mobile combinant deux boucles d'engagement quotidien :
+---
 
-Un feed public avec un Daily Photo Challenge (dimension sociale, acquisition, rétention légère)
-Un jeu de groupe privé "Mystery Box" où 3 à 4 joueurs estiment chaque jour le prix d'un objet mystère, cumulent des points, et où le moins bon est exclu en fin de semaine (dimension compétitive, rétention forte)
-1.2 Objectif stratégique
-Valider une mécanique de jeu social simple et peu coûteuse à développer, avant d'introduire une monétisation native via des partenariats avec des commerçants locaux (réductions offertes au gagnant/groupe), sans jamais faire payer l'utilisateur final dans un premier temps.
+## 1. Contexte, Positionnement et Vision Produit
+
+### 1.1 Identité & Slogans
+- **Nom du produit :** **VALUO**
+- **Headline (H1) :** *« As-tu vraiment l'œil pour ce qui a de la valeur ? »*
+- **Tagline principale :** *Le jeu social quotidien pour capturer l'insolite et tester votre flair entre amis.*
+- **Punchline Onboarding :** *« 1 défi photo par jour. 1 estimation quotidienne. 1 seul vainqueur dans ton groupe. »*
+
+### 1.2 Concept & Double Boucle d'Engagement
+VALUO est une application mobile / PWA qui fusionne la découverte visuelle quotidienne et le jeu d'estimation social :
+
+1. **Le Snap du Jour (Daily Photo Challenge)** : Un défi photo quotidien sur un thème donné (objets insolites, trésors urbains, détails du quotidien, lifestyle) pour créer une habitude légère et virale (rétention & acquisition).
+2. **La Mystery Box (Battle d'estimation en groupe privé)** : 3 à 4 joueurs par groupe estiment chaque jour le prix d'un objet/pépite mystère. Points cumulés au fil de la semaine, et le joueur ayant le moins bon score est éliminé le dimanche (rétention forte & intensité sociale).
+
+### 1.3 Objectif Stratégique
+Valider une mécanique de jeu social quotidienne simple, addictive et hautement partageable, avant d'introduire une monétisation native via des partenariats avec des commerçants et marques partenaires (Mystery Boxes sponsorisées, coupons et réductions exclusifs).
 
 1.3 Critères de succès du MVP
 Taux de complétion du cycle hebdomadaire Mystery Box (un groupe va jusqu'au bout de la semaine)

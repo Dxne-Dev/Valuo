@@ -1,0 +1,19 @@
+{
+  "name": "Les Brocanteurs",
+  "short_name": "Brocanteurs",
+  "description": "Le jeu social des belles trouvailles et des objets mystère.",
+  "lang": "fr",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbf8f1",
+  "theme_color": "#173f35",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/brocanteurs-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
