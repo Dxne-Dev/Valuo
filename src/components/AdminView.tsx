@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import {
+  ArrowLeft,
   Crown,
   MessageSquare,
   PackageOpen,
@@ -30,6 +31,7 @@ type AdminViewProps = {
   onPostCreated: () => void;
   onPostDeleted: (postId: string | number) => void;
   onNotice: (msg: string) => void;
+  onBack?: () => void;
 };
 
 export default function AdminView({
@@ -42,6 +44,7 @@ export default function AdminView({
   onPostCreated,
   onPostDeleted,
   onNotice,
+  onBack,
 }: AdminViewProps) {
   const [tab, setTab] = useState<"challenge" | "announcement" | "mystery" | "posts">("challenge");
 
@@ -144,6 +147,17 @@ export default function AdminView({
               <h1 className="mt-1 font-display text-2xl font-bold sm:text-3xl">Tableau de Bord du Jeu</h1>
             </div>
           </div>
+
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex items-center gap-2 rounded-full bg-white/15 px-4 py-2.5 text-xs font-extrabold text-white backdrop-blur transition hover:bg-white hover:text-[#173f35]"
+            >
+              <ArrowLeft size={15} />
+              <span>Retour au jeu</span>
+            </button>
+          )}
         </div>
 
         {/* Navigation Tabs */}

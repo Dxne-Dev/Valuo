@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     avatar_url TEXT DEFAULT 'https://images.pexels.com/photos/14842170/pexels-photo-14842170.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=300&w=300',
     cover_url TEXT DEFAULT 'https://images.pexels.com/photos/8099796/pexels-photo-8099796.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=900&w=1400',
     member_since TEXT DEFAULT to_char(now(), 'TMMonth YYYY'),
+    is_admin BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -201,14 +202,16 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(use
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO public.profiles (id, name, avatar_url, city)
+    INSERT INTO public.profiles (id, name, avatar_url, city, is_admin)
     VALUES (
         NEW.id,
         COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1), 'Chasseur VALUO'),
         COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://images.pexels.com/photos/14842170/pexels-photo-14842170.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=300&w=300'),
-        COALESCE(NEW.raw_user_meta_data->>'city', 'Bordeaux')
+        COALESCE(NEW.raw_user_meta_data->>'city', 'Bordeaux'),
+        COALESCE((NEW.raw_user_meta_data->>'is_admin')::boolean, (NEW.email = 'alasanemomo244@gmail.com'), false)
     )
-    ON CONFLICT (id) DO NOTHING;
+    ON CONFLICT (id) DO UPDATE SET
+        is_admin = COALESCE(EXCLUDED.is_admin, profiles.is_admin);
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

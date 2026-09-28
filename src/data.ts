@@ -27,6 +27,7 @@ export type UserProfile = {
   avatar: string;
   cover: string;
   memberSince: string;
+  isAdmin?: boolean;
 };
 
 export type NotificationType = "challenge" | "friend" | "like" | "comment" | "mystery";

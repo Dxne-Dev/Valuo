@@ -261,7 +261,29 @@ export default function App() {
     }
   }
 
+  const isAdminUser = Boolean(
+    currentUser?.isAdmin === true ||
+    authIdentifier === "alasanemomo244@gmail.com"
+  );
+
+  // Check URL query for direct admin access (?admin=true or ?mode=admin)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("admin") === "true" || params.get("mode") === "admin") {
+        if (isAdminUser) {
+          setActiveTab("admin");
+        }
+      }
+    }
+  }, [isAdminUser]);
+
   function navigate(tab: Tab) {
+    if (tab === "admin" && !isAdminUser) {
+      setNotice("Accès réservé aux administrateurs.");
+      setActiveTab("feed");
+      return;
+    }
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -665,7 +687,6 @@ export default function App() {
             notifications={notifications}
             onOpenCamera={() => setComposerOpen(true)}
             onOpenNotifications={() => navigate("notifications")}
-            onOpenAdmin={() => navigate("admin")}
           />
           <main className="mx-auto max-w-[1280px] px-4 pb-28 pt-6 sm:px-7 sm:pt-8 lg:px-10 lg:pb-12 lg:pt-10">
             <AnimatePresence mode="wait">
@@ -720,6 +741,7 @@ export default function App() {
                     onPostCreated={() => loadPublicData()}
                     onPostDeleted={handlePostDeleted}
                     onNotice={setNotice}
+                    onBack={() => navigate("feed")}
                   />
                 )}
                 {activeTab === "profile" && (

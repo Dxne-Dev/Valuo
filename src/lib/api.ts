@@ -174,6 +174,11 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
       return localProfile;
     }
 
+    const isAdmin = Boolean(
+      data.is_admin === true ||
+      localProfile?.isAdmin === true
+    );
+
     const fetchedProfile: UserProfile = {
       name: data.name || localProfile?.name || "Joueur VALUO",
       city: data.city || localProfile?.city || "France",
@@ -181,6 +186,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
       avatar: data.avatar_url || localProfile?.avatar || avatars.lea,
       cover: data.cover_url || localProfile?.cover || "https://images.pexels.com/photos/8099796/pexels-photo-8099796.jpeg",
       memberSince: data.member_since || localProfile?.memberSince || "Septembre 2026",
+      isAdmin,
     };
 
     if (typeof window !== "undefined") {
@@ -219,6 +225,7 @@ export async function saveUserProfile(userId: string, profile: Partial<UserProfi
   if (mergedProfile.bio !== undefined) payload.bio = mergedProfile.bio;
   if (mergedProfile.avatar !== undefined) payload.avatar_url = mergedProfile.avatar;
   if (mergedProfile.cover !== undefined) payload.cover_url = mergedProfile.cover;
+  if (mergedProfile.isAdmin !== undefined) payload.is_admin = mergedProfile.isAdmin;
 
   try {
     const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });

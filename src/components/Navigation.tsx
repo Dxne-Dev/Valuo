@@ -4,7 +4,6 @@ import {
   Camera,
   CheckCheck,
   ChevronRight,
-  Crown,
   Heart,
   Home,
   LogOut,
@@ -37,7 +36,6 @@ type NavigationProps = {
   active: Tab;
   profile?: UserProfile;
   notifications: AppNotification[];
-  isAdmin?: boolean;
   dayNumber?: number;
   weekNumber?: number;
   cycleMessage?: string;
@@ -51,7 +49,6 @@ export function DesktopNavigation({
   active,
   profile,
   notifications,
-  isAdmin = true,
   dayNumber = 1,
   weekNumber = 38,
   cycleMessage = "Élimination de l'escouade samedi à 20 h.",
@@ -292,32 +289,6 @@ export function DesktopNavigation({
             )}
           </AnimatePresence>
         </div>
-
-        {/* Bouton Espace Admin */}
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => {
-              setNotifOpen(false);
-              onNavigate("admin");
-            }}
-            title={!isHovered ? "Admin / Game Master" : undefined}
-            className={`relative flex w-full items-center rounded-2xl py-3.5 text-sm font-semibold transition-colors ${
-              isHovered ? "gap-3 px-4" : "justify-center px-0"
-            } ${
-              active === "admin"
-                ? "bg-[#173f35] text-[#f3c969] shadow-sm"
-                : "text-[#506158] hover:bg-white/70 hover:text-[#173f35]"
-            }`}
-          >
-            <Crown size={20} className="shrink-0 text-[#f3c969]" />
-            {isHovered && (
-              <span className="truncate whitespace-nowrap text-sm font-semibold">
-                Game Master
-              </span>
-            )}
-          </button>
-        )}
       </nav>
 
       {/* Barre de progression (Semaine) */}
@@ -389,12 +360,10 @@ export function MobileHeader({
   notifications = [],
   onOpenCamera,
   onOpenNotifications,
-  onOpenAdmin,
 }: {
   notifications?: AppNotification[];
   onOpenCamera: () => void;
   onOpenNotifications: () => void;
-  onOpenAdmin?: () => void;
 }) {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -402,16 +371,6 @@ export function MobileHeader({
     <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[#173f35]/8 bg-[#fbf8f1]/90 px-5 py-3 backdrop-blur-xl lg:hidden">
       <Logo size={40} />
       <div className="flex items-center gap-1">
-        {onOpenAdmin && (
-          <button
-            type="button"
-            onClick={onOpenAdmin}
-            aria-label="Espace Admin Game Master"
-            className="rounded-full p-2 text-[#173f35] transition hover:bg-[#efe7d8]"
-          >
-            <Crown size={19} className="text-[#e9683a]" />
-          </button>
-        )}
         <button
           type="button"
           onClick={onOpenCamera}
