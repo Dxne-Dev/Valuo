@@ -225,21 +225,29 @@ export default function App() {
 
   async function loadUserData(uid: string, sessionUser?: any) {
     try {
+      const isAlreadyOnboarded = localStorage.getItem(`valuo_onboarded_${uid}`) === "true";
       const profile = await fetchUserProfile(uid);
-      const needsPwdChange = sessionUser?.user_metadata?.needs_password_change === true;
-      const isAlreadyOnboarded = !needsPwdChange && localStorage.getItem(`valuo_onboarded_${uid}`) === "true";
 
       if (profile) {
         setCurrentUser(profile);
       } else {
-        const emailFallback = sessionUser?.email || authIdentifier;
-        const fallbackName = emailFallback && emailFallback.includes("@")
-          ? emailFallback.split("@")[0].charAt(0).toUpperCase() + emailFallback.split("@")[0].slice(1)
-          : "Chasseur VALUO";
-        setCurrentUser({
-          ...cleanUserProfile,
-          name: fallbackName,
-        });
+        const cached = typeof window !== "undefined" ? localStorage.getItem(`valuo_user_profile_${uid}`) : null;
+        let localProfile: UserProfile | null = null;
+        if (cached) {
+          try { localProfile = JSON.parse(cached); } catch {}
+        }
+        if (localProfile) {
+          setCurrentUser(localProfile);
+        } else {
+          const emailFallback = sessionUser?.email || authIdentifier;
+          const fallbackName = emailFallback && emailFallback.includes("@")
+            ? emailFallback.split("@")[0].charAt(0).toUpperCase() + emailFallback.split("@")[0].slice(1)
+            : "Chasseur VALUO";
+          setCurrentUser({
+            ...cleanUserProfile,
+            name: fallbackName,
+          });
+        }
       }
       setIsOnboarded(Boolean(isAlreadyOnboarded));
 
@@ -567,7 +575,7 @@ export default function App() {
       setGroup(null);
       setPosts([pinnedGameMasterPost]);
 
-      const isAlreadyOnboarded = !_isTempPassword && Boolean(newUid && localStorage.getItem(`valuo_onboarded_${newUid}`) === "true");
+      const isAlreadyOnboarded = Boolean(newUid && localStorage.getItem(`valuo_onboarded_${newUid}`) === "true");
       setIsOnboarded(isAlreadyOnboarded);
 
       // Check if user already has a saved profile in localStorage

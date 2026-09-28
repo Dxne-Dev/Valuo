@@ -76,13 +76,9 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
         setPwdError("Les deux mots de passe ne correspondent pas.");
         return;
       }
-      try {
-        await updateUserPassword(password.trim());
-      } catch (err: any) {
-        console.warn("Could not update password during onboarding:", err);
-      }
     }
 
+    // Call onComplete first so localStorage and state are committed before any auth change event fires
     onComplete(
       {
         name: name.trim() || initialName || "Chasseur VALUO",
@@ -92,6 +88,14 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
       squadChoice,
       squadCodeInput.trim().toUpperCase(),
     );
+
+    if (password.trim()) {
+      try {
+        await updateUserPassword(password.trim());
+      } catch (err: any) {
+        console.warn("Could not update password during onboarding:", err);
+      }
+    }
   }
 
   return (
