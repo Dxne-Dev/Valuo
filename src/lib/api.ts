@@ -164,29 +164,33 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
   if (!isSupabaseConfigured) return localProfile;
 
   try {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", userId)
       .maybeSingle();
 
-    if (error || !data) {
-      return localProfile;
-    }
+    const { data: authData } = await supabase.auth.getUser();
+    const meta = authData?.user?.user_metadata;
 
     const isAdmin = Boolean(
-      data.is_admin === true ||
+      data?.is_admin === true ||
+      meta?.is_admin === true ||
       localProfile?.isAdmin === true
     );
 
-    // Merge: prefer DB fields, fallback to localProfile fields
+    // Prioritize explicit onboarding choices from localProfile or auth metadata over default trigger values
+    const effectiveName = (localProfile?.name && localProfile.name !== "Chasseur VALUO" ? localProfile.name : (meta?.name || data?.name)) || "Joueur VALUO";
+    const effectiveCity = (localProfile?.city && localProfile.city !== "France" ? localProfile.city : (meta?.city || data?.city)) || "France";
+    const effectiveAvatar = (localProfile?.avatar ? localProfile.avatar : (meta?.avatar_url || data?.avatar_url)) || avatars.lea;
+
     const fetchedProfile: UserProfile = {
-      name: data.name || localProfile?.name || "Joueur VALUO",
-      city: data.city || localProfile?.city || "France",
-      bio: data.bio || localProfile?.bio || "",
-      avatar: data.avatar_url || localProfile?.avatar || avatars.lea,
-      cover: data.cover_url || localProfile?.cover || "https://images.pexels.com/photos/8099796/pexels-photo-8099796.jpeg",
-      memberSince: data.member_since || localProfile?.memberSince || "Septembre 2026",
+      name: effectiveName,
+      city: effectiveCity,
+      bio: data?.bio || localProfile?.bio || "",
+      avatar: effectiveAvatar,
+      cover: data?.cover_url || localProfile?.cover || "https://images.pexels.com/photos/8099796/pexels-photo-8099796.jpeg",
+      memberSince: data?.member_since || localProfile?.memberSince || "Septembre 2026",
       isAdmin,
     };
 
@@ -228,7 +232,17 @@ export async function saveUserProfile(userId: string, profile: Partial<UserProfi
   if (mergedProfile.isAdmin !== undefined) updateFields.is_admin = mergedProfile.isAdmin;
 
   try {
-    // 1. Try UPDATE directly (compliant with "Users can update their own profile" RLS policy)
+    // 0. Also sync to Auth User metadata directly (guaranteed write even without table RLS)
+    await supabase.auth.updateUser({
+      data: {
+        name: mergedProfile.name,
+        city: mergedProfile.city,
+        avatar_url: mergedProfile.avatar,
+        customized: true,
+      },
+    });
+
+    // 1. Try UPDATE directly on profiles table
     const { data: updatedRows, error: updateError } = await supabase
       .from("profiles")
       .update(updateFields)
@@ -236,7 +250,7 @@ export async function saveUserProfile(userId: string, profile: Partial<UserProfi
       .select();
 
     if (updateError || !updatedRows || updatedRows.length === 0) {
-      // 2. If row does not exist yet in profiles table, upsert with primary key id
+      // 2. Fallback upsert
       const upsertPayload = { id: userId, ...updateFields };
       const { error: upsertError } = await supabase
         .from("profiles")

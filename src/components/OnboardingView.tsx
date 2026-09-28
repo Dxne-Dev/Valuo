@@ -78,12 +78,16 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
       }
     }
 
-    // Call onComplete first so localStorage and state are committed before any auth change event fires
-    onComplete(
+    const chosenName = name.trim() || initialName || "Chasseur VALUO";
+    const chosenCity = city.trim() || "France";
+    const chosenAvatar = selectedAvatar;
+
+    // Call and await onComplete first so localStorage, state, and DB are committed
+    await onComplete(
       {
-        name: name.trim() || initialName || "Chasseur VALUO",
-        city: city.trim() || "Bordeaux",
-        avatar: selectedAvatar,
+        name: chosenName,
+        city: chosenCity,
+        avatar: chosenAvatar,
       },
       squadChoice,
       squadCodeInput.trim().toUpperCase(),
