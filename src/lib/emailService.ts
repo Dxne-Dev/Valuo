@@ -153,7 +153,7 @@ export function getValuoWelcomeEmailHtml({
     <div class="password-card">
       <div class="label">Mot de passe temporaire</div>
       <div class="code">${tempPassword}</div>
-      <div class="expiry">⏱️ Valable pendant 24 heures seulement</div>
+      <div class="expiry">Valable pendant 24 heures seulement</div>
     </div>
 
     <a href="${activationUrl}" class="cta-btn">Activer mon compte & Me connecter →</a>

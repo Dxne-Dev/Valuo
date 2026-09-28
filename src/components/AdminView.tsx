@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import {
-  ArrowLeft,
-  Crown,
+  Activity,
+  LayoutDashboard,
   MessageSquare,
   PackageOpen,
   Pin,
@@ -9,10 +9,18 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  Trophy,
   Upload,
+  Users,
 } from "lucide-react";
-import { type ChangeEvent, type FormEvent, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 import { type FeedPost, media } from "../data";
+import {
+  type AdminMetrics,
+  type AdminSquadSummary,
+  fetchAdminMetrics,
+  fetchAdminSquadsList,
+} from "../lib/adminApi";
 import {
   type ChallengeData,
   createOfficialPost,
@@ -31,7 +39,6 @@ type AdminViewProps = {
   onPostCreated: () => void;
   onPostDeleted: (postId: string | number) => void;
   onNotice: (msg: string) => void;
-  onBack?: () => void;
 };
 
 export default function AdminView({
@@ -44,9 +51,17 @@ export default function AdminView({
   onPostCreated,
   onPostDeleted,
   onNotice,
-  onBack,
 }: AdminViewProps) {
-  const [tab, setTab] = useState<"challenge" | "announcement" | "mystery" | "posts">("challenge");
+  const [tab, setTab] = useState<"overview" | "challenge" | "announcement" | "mystery" | "posts" | "squads">("overview");
+
+  // Metrics & Squads state
+  const [metrics, setMetrics] = useState<AdminMetrics>({
+    totalPlayers: 1,
+    totalPosts: posts.length,
+    totalSquads: 1,
+    totalEstimates: 0,
+  });
+  const [squadsList, setSquadsList] = useState<AdminSquadSummary[]>([]);
 
   // 1. Challenge Form
   const [theme, setTheme] = useState(activeChallenge.theme);
@@ -56,7 +71,7 @@ export default function AdminView({
   // 2. Official Announcement Form
   const [announcementPhoto, setAnnouncementPhoto] = useState(media.redPhone);
   const [announcementCaption, setAnnouncementCaption] = useState(
-    "🔥 Défi officiel du jour lancé ! Repérez un objet qui correspond au thème et partagez votre trouvaille avant minuit.",
+    "Défi officiel du jour lancé ! Repérez un objet qui correspond au thème et partagez votre trouvaille avant minuit.",
   );
   const [isPinned, setIsPinned] = useState(true);
   const [publishingPost, setPublishingPost] = useState(false);
@@ -67,6 +82,19 @@ export default function AdminView({
   const [mysteryBrief, setMysteryBrief] = useState(mysteryItem.brief);
   const [mysteryHint, setMysteryHint] = useState(mysteryItem.hint);
   const [mysteryRealPrice, setMysteryRealPrice] = useState(String(mysteryItem.realPrice));
+
+  useEffect(() => {
+    async function loadAdminData() {
+      try {
+        const [m, s] = await Promise.all([fetchAdminMetrics(), fetchAdminSquadsList()]);
+        setMetrics(m);
+        setSquadsList(s);
+      } catch (err) {
+        console.warn("Could not load admin stats:", err);
+      }
+    }
+    loadAdminData();
+  }, [posts.length]);
 
   async function handleSaveChallenge(event: FormEvent) {
     event.preventDefault();
@@ -81,7 +109,7 @@ export default function AdminView({
 
     await saveActiveChallenge(updated);
     onChallengeUpdated(updated);
-    onNotice("Défi du jour mis à jour avec succès !");
+    onNotice("Défi du jour mis à jour avec succès.");
   }
 
   async function handlePublishOfficialPost(event: FormEvent) {
@@ -93,7 +121,7 @@ export default function AdminView({
     await createOfficialPost(uid, announcementPhoto, announcementCaption.trim(), isPinned);
     setPublishingPost(false);
     onPostCreated();
-    onNotice("Annonce officielle Game Master publiée dans le feed !");
+    onNotice("Annonce officielle Game Master publiée dans le feed.");
   }
 
   async function handleSaveMystery(event: FormEvent) {
@@ -110,7 +138,7 @@ export default function AdminView({
 
     await saveMysteryItem(updated);
     onMysteryUpdated(updated);
-    onNotice("Mystery Box du jour mise à jour avec succès !");
+    onNotice("Mystery Box du jour mise à jour avec succès.");
   }
 
   function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>, setter: (val: string) => void) {
@@ -127,46 +155,37 @@ export default function AdminView({
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mx-auto max-w-4xl space-y-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mx-auto max-w-5xl space-y-6">
       {/* Admin Header Banner */}
-      <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#173f35] to-[#0f2c25] p-6 text-white sm:p-8 shadow-xl">
+      <div className="relative overflow-hidden rounded-[28px] bg-[#173f35] p-6 text-white sm:p-8 shadow-xl">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3.5">
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#f3c969] text-[#173f35] shadow-md">
-              <Crown size={24} />
+              <ShieldCheck size={24} />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#f3c969]">
-                  Game Master
+                  Espace Dédié
                 </span>
-                <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-400">
-                  <ShieldCheck size={13} /> Espace d'administration
+                <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-300">
+                  <Activity size={13} /> Cockpit Game Master
                 </span>
               </div>
               <h1 className="mt-1 font-display text-2xl font-bold sm:text-3xl">Tableau de Bord du Jeu</h1>
             </div>
           </div>
-
-          {onBack && (
-            <button
-              type="button"
-              onClick={onBack}
-              className="flex items-center gap-2 rounded-full bg-white/15 px-4 py-2.5 text-xs font-extrabold text-white backdrop-blur transition hover:bg-white hover:text-[#173f35]"
-            >
-              <ArrowLeft size={15} />
-              <span>Retour au jeu</span>
-            </button>
-          )}
         </div>
 
         {/* Navigation Tabs */}
         <div className="mt-6 flex flex-wrap gap-2 border-t border-white/10 pt-4">
           {[
-            { id: "challenge", label: "1. Défi du Jour", icon: Sparkles },
-            { id: "announcement", label: "2. Post Officiel Feed", icon: Pin },
-            { id: "mystery", label: "3. Mystery Box", icon: PackageOpen },
-            { id: "posts", label: `4. Modération Feed (${posts.length})`, icon: MessageSquare },
+            { id: "overview", label: "Vue d'ensemble", icon: LayoutDashboard },
+            { id: "challenge", label: "Défi du Jour", icon: Sparkles },
+            { id: "announcement", label: "Post Officiel", icon: Pin },
+            { id: "mystery", label: "Mystery Box", icon: PackageOpen },
+            { id: "posts", label: `Modération (${posts.length})`, icon: MessageSquare },
+            { id: "squads", label: `Escouades (${squadsList.length})`, icon: Users },
           ].map((item) => {
             const Icon = item.icon;
             const isActive = tab === item.id;
@@ -188,6 +207,93 @@ export default function AdminView({
           })}
         </div>
       </div>
+
+      {/* TAB 0: OVERVIEW / STATS */}
+      {tab === "overview" && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          {/* Key Metrics Grid */}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="rounded-[24px] border border-[#173f35]/8 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-[#6f7e76]">Joueurs</span>
+                <Users size={18} className="text-[#173f35]" />
+              </div>
+              <p className="mt-3 font-display text-3xl font-bold text-[#173f35]">{metrics.totalPlayers}</p>
+              <p className="mt-1 text-[11px] text-[#76837c]">Inscrits sur la plateforme</p>
+            </div>
+
+            <div className="rounded-[24px] border border-[#173f35]/8 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-[#6f7e76]">Publications</span>
+                <Sparkles size={18} className="text-[#e9683a]" />
+              </div>
+              <p className="mt-3 font-display text-3xl font-bold text-[#173f35]">{posts.length}</p>
+              <p className="mt-1 text-[11px] text-[#76837c]">Photos partagées</p>
+            </div>
+
+            <div className="rounded-[24px] border border-[#173f35]/8 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-[#6f7e76]">Escouades</span>
+                <Trophy size={18} className="text-[#488262]" />
+              </div>
+              <p className="mt-3 font-display text-3xl font-bold text-[#173f35]">{squadsList.length || 1}</p>
+              <p className="mt-1 text-[11px] text-[#76837c]">Groupes de compétition</p>
+            </div>
+
+            <div className="rounded-[24px] border border-[#173f35]/8 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-[#6f7e76]">Estimations</span>
+                <PackageOpen size={18} className="text-[#946914]" />
+              </div>
+              <p className="mt-3 font-display text-3xl font-bold text-[#173f35]">{metrics.totalEstimates}</p>
+              <p className="mt-1 text-[11px] text-[#76837c]">Soumises cette semaine</p>
+            </div>
+          </div>
+
+          {/* Quick status card */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="rounded-[26px] border border-[#173f35]/8 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-[#e9683a]">Défi Actif</span>
+                <span className="rounded-full bg-[#173f35]/8 px-2.5 py-0.5 text-[10px] font-bold text-[#173f35]">
+                  En cours
+                </span>
+              </div>
+              <h3 className="mt-2 font-display text-xl font-bold text-[#173f35]">{activeChallenge.theme}</h3>
+              <p className="mt-1 text-xs text-[#6e7d75] leading-relaxed">{activeChallenge.brief}</p>
+              <div className="mt-4 flex items-center gap-3 pt-3 border-t border-[#173f35]/6">
+                <button
+                  type="button"
+                  onClick={() => setTab("challenge")}
+                  className="rounded-full bg-[#173f35] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#23584b]"
+                >
+                  Modifier le thème
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-[26px] border border-[#173f35]/8 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-[#e9683a]">Mystery Box du Jour</span>
+                <span className="rounded-full bg-[#f3c969]/30 px-2.5 py-0.5 text-[10px] font-bold text-[#173f35]">
+                  {mysteryItem.realPrice} €
+                </span>
+              </div>
+              <h3 className="mt-2 font-display text-xl font-bold text-[#173f35]">{mysteryItem.title}</h3>
+              <p className="mt-1 text-xs text-[#6e7d75] leading-relaxed">{mysteryItem.brief}</p>
+              <div className="mt-4 flex items-center gap-3 pt-3 border-t border-[#173f35]/6">
+                <button
+                  type="button"
+                  onClick={() => setTab("mystery")}
+                  className="rounded-full bg-[#173f35] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#23584b]"
+                >
+                  Configurer la box
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* TAB 1: DÉFI DU JOUR */}
       {tab === "challenge" && (
@@ -273,7 +379,7 @@ export default function AdminView({
                 rows={3}
                 value={announcementCaption}
                 onChange={(e) => setAnnouncementCaption(e.target.value)}
-                placeholder="Ex: 🔥 Défi du jour : « Une touche de rouge »…"
+                placeholder="Ex: Défi du jour : « Une touche de rouge »…"
                 className="mt-1.5 w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] p-4 text-sm text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
               />
             </div>
@@ -423,6 +529,42 @@ export default function AdminView({
                   >
                     <Trash2 size={16} />
                   </button>
+                </div>
+              ))
+            )}
+          </div>
+        </motion.div>
+      )}
+
+      {/* TAB 5: SQUADS SUPERVISION */}
+      {tab === "squads" && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-[28px] bg-white p-6 sm:p-8 shadow-sm border border-[#173f35]/8">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#e9683a]">
+            <Users size={16} /> Supervision des Escouades
+          </div>
+          <h2 className="mt-1 font-display text-2xl font-semibold text-[#173f35]">Groupes Actifs</h2>
+
+          <div className="mt-6 space-y-3">
+            {squadsList.length === 0 ? (
+              <p className="py-8 text-center text-sm text-[#7a8780]">Aucune escouade active enregistrée.</p>
+            ) : (
+              squadsList.map((squad) => (
+                <div key={squad.id} className="flex items-center justify-between gap-4 rounded-2xl border border-[#173f35]/10 bg-[#fbf8f1] p-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-[#173f35]">{squad.name}</span>
+                      <span className="rounded-full bg-[#173f35]/10 px-2 py-0.5 text-[10px] font-extrabold text-[#173f35]">
+                        {squad.code}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#6e7d75] mt-0.5">
+                      Semaine {squad.weekNumber} · {squad.membersCount}/4 joueurs
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-extrabold text-[#e9683a]">{squad.topScore} pts</span>
+                    <p className="text-[10px] text-[#7a8780]">Meilleur score</p>
+                  </div>
                 </div>
               ))
             )}

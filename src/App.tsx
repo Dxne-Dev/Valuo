@@ -251,6 +251,10 @@ export default function App() {
       }
       setIsOnboarded(Boolean(isAlreadyOnboarded));
 
+      if (profile?.isAdmin || sessionUser?.email === "alasanemomo244@gmail.com") {
+        setActiveTab("admin");
+      }
+
       const userSquad = await fetchUserSquad(uid);
       if (userSquad) setGroup(userSquad);
 
@@ -749,7 +753,6 @@ export default function App() {
                     onPostCreated={() => loadPublicData()}
                     onPostDeleted={handlePostDeleted}
                     onNotice={setNotice}
-                    onBack={() => navigate("feed")}
                   />
                 )}
                 {activeTab === "profile" && (

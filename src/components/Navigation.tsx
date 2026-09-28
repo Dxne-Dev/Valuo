@@ -9,6 +9,7 @@ import {
   LogOut,
   MessageCircle,
   PackageOpen,
+  ShieldCheck,
   Sparkles,
   Trophy,
   UserPlus,
@@ -68,6 +69,13 @@ export function DesktopNavigation({
   const unreadCount = notifications.filter((n) => !n.read).length;
   const recentNotifs = notifications.slice(0, 4);
 
+  const currentNavItems = profile?.isAdmin
+    ? [
+        { id: "admin" as const, label: "Game Master", icon: ShieldCheck },
+        ...navItems,
+      ]
+    : navItems;
+
   function getNotifIcon(type: NotificationType) {
     switch (type) {
       case "challenge":
@@ -126,7 +134,7 @@ export function DesktopNavigation({
 
       {/* Navigation Links */}
       <nav className="mt-10 space-y-2" aria-label="Navigation principale">
-        {navItems.map((item) => {
+        {currentNavItems.map((item) => {
           const Icon = item.icon;
           const selected = item.id === active;
           return (
