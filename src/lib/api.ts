@@ -179,6 +179,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
       localProfile?.isAdmin === true
     );
 
+    // Merge: prefer DB fields, fallback to localProfile fields
     const fetchedProfile: UserProfile = {
       name: data.name || localProfile?.name || "Joueur VALUO",
       city: data.city || localProfile?.city || "France",
@@ -215,25 +216,37 @@ export async function saveUserProfile(userId: string, profile: Partial<UserProfi
 
   if (!isSupabaseConfigured) return;
 
-  const payload: Record<string, unknown> = {
-    id: userId,
+  const updateFields: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
 
-  if (mergedProfile.name !== undefined) payload.name = mergedProfile.name;
-  if (mergedProfile.city !== undefined) payload.city = mergedProfile.city;
-  if (mergedProfile.bio !== undefined) payload.bio = mergedProfile.bio;
-  if (mergedProfile.avatar !== undefined) payload.avatar_url = mergedProfile.avatar;
-  if (mergedProfile.cover !== undefined) payload.cover_url = mergedProfile.cover;
-  if (mergedProfile.isAdmin !== undefined) payload.is_admin = mergedProfile.isAdmin;
+  if (mergedProfile.name !== undefined) updateFields.name = mergedProfile.name;
+  if (mergedProfile.city !== undefined) updateFields.city = mergedProfile.city;
+  if (mergedProfile.bio !== undefined) updateFields.bio = mergedProfile.bio;
+  if (mergedProfile.avatar !== undefined) updateFields.avatar_url = mergedProfile.avatar;
+  if (mergedProfile.cover !== undefined) updateFields.cover_url = mergedProfile.cover;
+  if (mergedProfile.isAdmin !== undefined) updateFields.is_admin = mergedProfile.isAdmin;
 
   try {
-    const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
-    if (error) {
-      console.warn("Supabase profiles upsert info/warning:", error);
+    // 1. Try UPDATE directly (compliant with "Users can update their own profile" RLS policy)
+    const { data: updatedRows, error: updateError } = await supabase
+      .from("profiles")
+      .update(updateFields)
+      .eq("id", userId)
+      .select();
+
+    if (updateError || !updatedRows || updatedRows.length === 0) {
+      // 2. If row does not exist yet in profiles table, upsert with primary key id
+      const upsertPayload = { id: userId, ...updateFields };
+      const { error: upsertError } = await supabase
+        .from("profiles")
+        .upsert(upsertPayload, { onConflict: "id" });
+      if (upsertError) {
+        console.warn("Supabase profiles upsert warning:", upsertError);
+      }
     }
   } catch (err) {
-    console.warn("Supabase profiles upsert exception:", err);
+    console.warn("Supabase profiles save exception:", err);
   }
 }
 
