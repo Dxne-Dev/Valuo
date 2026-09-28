@@ -22,6 +22,7 @@ dist-ssr
 .DS_Store
 *.suo
 *.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Documentation / planning
+PLAN.md
+MVP.md
+DESIGN.md
