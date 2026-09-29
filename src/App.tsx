@@ -225,8 +225,21 @@ export default function App() {
 
   async function loadUserData(uid: string, sessionUser?: any) {
     try {
-      const isAlreadyOnboarded = localStorage.getItem(`valuo_onboarded_${uid}`) === "true";
+      const isLocalOnboarded = localStorage.getItem(`valuo_onboarded_${uid}`) === "true";
       const profile = await fetchUserProfile(uid);
+
+      const isUserAdmin = Boolean(
+        profile?.isAdmin === true ||
+        sessionUser?.email === "alasanemomo244@gmail.com" ||
+        authIdentifier === "alasanemomo244@gmail.com"
+      );
+
+      const hasCompletedOnboarding = Boolean(
+        isLocalOnboarded ||
+        isUserAdmin ||
+        sessionUser?.user_metadata?.needs_password_change === false ||
+        sessionUser?.user_metadata?.customized === true
+      );
 
       if (profile) {
         setCurrentUser(profile);
@@ -249,9 +262,13 @@ export default function App() {
           });
         }
       }
-      setIsOnboarded(Boolean(isAlreadyOnboarded));
 
-      if (profile?.isAdmin || sessionUser?.email === "alasanemomo244@gmail.com") {
+      setIsOnboarded(hasCompletedOnboarding);
+      if (hasCompletedOnboarding && typeof window !== "undefined") {
+        localStorage.setItem(`valuo_onboarded_${uid}`, "true");
+      }
+
+      if (isUserAdmin) {
         setActiveTab("admin");
       }
 
@@ -553,10 +570,9 @@ export default function App() {
     }
   }
 
-  function handleAuthSuccess(identifier?: string, newUid?: string, _isTempPassword?: boolean, isDemo?: boolean) {
+  async function handleAuthSuccess(identifier?: string, newUid?: string, isTempPassword?: boolean, isDemo?: boolean) {
     setAuthIdentifier(identifier || "");
     if (newUid) setUserId(newUid);
-    setSignedIn(true);
 
     if (isDemo) {
       setIsDemoUser(true);
@@ -571,35 +587,41 @@ export default function App() {
       });
       setNotifications([]);
       setPosts([pinnedGameMasterPost]);
-    } else {
+      setSignedIn(true);
+    } else if (newUid) {
       setIsDemoUser(false);
       localStorage.removeItem("valuo_demo_user");
-      setNotifications([]);
-      setFriends([]);
-      setGroup(null);
-      setPosts([pinnedGameMasterPost]);
 
-      const isAlreadyOnboarded = Boolean(newUid && localStorage.getItem(`valuo_onboarded_${newUid}`) === "true");
+      const isUserAdmin = Boolean(
+        identifier === "alasanemomo244@gmail.com" ||
+        localStorage.getItem(`valuo_user_profile_${newUid}`)?.includes('"isAdmin":true')
+      );
+
+      // Determine initial onboarded state
+      const isAlreadyOnboarded = Boolean(
+        !isTempPassword ||
+        isUserAdmin ||
+        localStorage.getItem(`valuo_onboarded_${newUid}`) === "true"
+      );
+
       setIsOnboarded(isAlreadyOnboarded);
+      if (isUserAdmin) {
+        setActiveTab("admin");
+      }
 
       // Check if user already has a saved profile in localStorage
-      const cached = newUid ? localStorage.getItem(`valuo_user_profile_${newUid}`) : null;
-      let existingProfile: UserProfile | null = null;
+      const cached = localStorage.getItem(`valuo_user_profile_${newUid}`);
       if (cached) {
-        try { existingProfile = JSON.parse(cached); } catch {}
+        try {
+          const existingProfile = JSON.parse(cached);
+          if (existingProfile) setCurrentUser(existingProfile);
+        } catch {}
       }
 
-      if (existingProfile && isAlreadyOnboarded) {
-        setCurrentUser(existingProfile);
-      } else {
-        const fallbackName = identifier && identifier.includes("@")
-          ? identifier.split("@")[0].charAt(0).toUpperCase() + identifier.split("@")[0].slice(1)
-          : "Chasseur VALUO";
-        setCurrentUser({
-          ...cleanUserProfile,
-          name: fallbackName,
-        });
-      }
+      setSignedIn(true);
+      await loadUserData(newUid);
+    } else {
+      setSignedIn(true);
     }
   }
 
