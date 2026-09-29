@@ -102,7 +102,7 @@ export default function App() {
   const [group, setGroup] = useState<GroupData | null>(null);
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [activeChallenge, setActiveChallenge] = useState<ChallengeData>(todayChallenge);
+  const [activeChallenge, setActiveChallenge] = useState<ChallengeData | null>(null);
   const [mysteryItem, setMysteryItem] = useState<MysteryItemData>({
     title: "Vase en faïence à décor floral",
     image: media.mystery,
@@ -242,7 +242,7 @@ export default function App() {
   async function loadPublicData() {
     try {
       const challenge = await fetchActiveChallenge();
-      if (challenge) setActiveChallenge(challenge);
+      setActiveChallenge(challenge);
 
       const mystery = await fetchMysteryItem();
       if (mystery) setMysteryItem(mystery);

@@ -17,7 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
-import { type FeedPost, todayChallenge, type UserProfile } from "@/data";
+import { type FeedPost, type UserProfile } from "@/data";
 import { type ChallengeData } from "../services/feedService";
 
 export type FeedFilter = "recents" | "friends" | "popular";
@@ -26,7 +26,7 @@ export type FeedViewProps = {
   posts: FeedPost[];
   friends: string[];
   currentUser: UserProfile;
-  challenge?: ChallengeData;
+  challenge?: ChallengeData | null;
   onToggleLike: (id: number | string) => void;
   onToggleFriend: (author: string) => void;
   onOpenComposer: () => void;
@@ -53,7 +53,6 @@ export default function FeedView({
   onAddComment,
   onJoinSquad,
 }: FeedViewProps) {
-  const currentChallenge = challenge || todayChallenge;
   const [filter, setFilter] = useState<FeedFilter>("recents");
   const [openComments, setOpenComments] = useState<number | string | null>(null);
   const [drafts, setDrafts] = useState<Record<string | number, string>>({});
@@ -88,36 +87,38 @@ export default function FeedView({
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }} className="mx-auto max-w-[680px]">
-      <section className="relative overflow-hidden rounded-[28px] bg-[#173f35] text-white">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#e9683a]/25 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-20 left-10 h-40 w-40 rounded-full bg-[#f3c969]/20 blur-2xl" />
-        <div className="relative p-5 sm:p-7">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#f3c969]">
-              <Sparkles size={14} /> Défi photo du jour
+      {challenge && (
+        <section className="relative overflow-hidden rounded-[28px] bg-[#173f35] text-white">
+          <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#e9683a]/25 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-20 left-10 h-40 w-40 rounded-full bg-[#f3c969]/20 blur-2xl" />
+          <div className="relative p-5 sm:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#f3c969]">
+                <Sparkles size={14} /> Défi photo du jour
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold text-white/80">
+                <Clock3 size={13} /> {challenge.remaining} restantes
+              </span>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold text-white/80">
-              <Clock3 size={13} /> {currentChallenge.remaining} restantes
-            </span>
+            <p className="mt-4 font-display text-[34px] font-semibold leading-[0.95] tracking-[-0.04em] sm:text-5xl">
+              {challenge.theme}
+            </p>
+            <p className="mt-3 max-w-md text-sm leading-relaxed text-white/70">{challenge.brief}</p>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={onOpenComposer}
+                className="inline-flex items-center gap-2 rounded-full bg-[#f3c969] px-5 py-3 text-sm font-extrabold text-[#173f35] transition hover:-translate-y-0.5 hover:bg-white"
+              >
+                <Camera size={16} /> Poster ma photo
+              </button>
+              <p className="text-xs font-semibold text-white/55">{posts.filter((p) => !p.isPinned).length} photos de joueurs aujourd'hui</p>
+            </div>
           </div>
-          <p className="mt-4 font-display text-[34px] font-semibold leading-[0.95] tracking-[-0.04em] sm:text-5xl">
-            {currentChallenge.theme}
-          </p>
-          <p className="mt-3 max-w-md text-sm leading-relaxed text-white/70">{currentChallenge.brief}</p>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={onOpenComposer}
-              className="inline-flex items-center gap-2 rounded-full bg-[#f3c969] px-5 py-3 text-sm font-extrabold text-[#173f35] transition hover:-translate-y-0.5 hover:bg-white"
-            >
-              <Camera size={16} /> Poster ma photo
-            </button>
-            <p className="text-xs font-semibold text-white/55">{posts.filter((p) => !p.isPinned).length} photos de joueurs aujourd'hui</p>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      <div className="mt-4 overflow-hidden rounded-[24px] border border-[#173f35]/8 bg-white">
+      <div className={`${challenge ? "mt-4" : "mt-1"} overflow-hidden rounded-[24px] border border-[#173f35]/8 bg-white`}>
         <button
           type="button"
           onClick={onOpenComposer}
@@ -125,7 +126,7 @@ export default function FeedView({
         >
           <img src={currentUser.avatar} alt="" className="h-10 w-10 rounded-full object-cover" />
           <span className="flex-1 rounded-full bg-[#f5f0e5] px-4 py-2.5 text-sm text-[#8a958f]">
-            Partage ta photo du défi…
+            {challenge ? "Partage ta photo du défi…" : "Partage une photo dans le feed…"}
           </span>
           <span className="hidden rounded-full bg-[#173f35] px-3 py-2 text-xs font-extrabold text-white sm:inline">Publier</span>
         </button>
@@ -276,7 +277,7 @@ export default function FeedView({
                   )}
 
                   <span className="hidden rounded-full bg-[#fff1e8] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[#e9683a] sm:inline">
-                    {post.isRecruitment ? "Escouade" : todayChallenge.theme}
+                    {post.isRecruitment ? "Escouade" : (challenge?.theme || "Défi photo")}
                   </span>
                   <button type="button" aria-label="Plus d'options" className="rounded-full p-2 text-[#8c968f] hover:bg-[#f5f0e5]">
                     <MoreHorizontal size={17} />

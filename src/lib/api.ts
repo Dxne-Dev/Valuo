@@ -7,7 +7,6 @@ import {
   type GroupData,
   type GroupMember,
   media,
-  pinnedGameMasterPost,
   todayChallenge,
   type UserProfile,
 } from "../data";
@@ -309,12 +308,13 @@ export type ChallengeData = {
   remaining: string;
 };
 
-export async function fetchActiveChallenge(): Promise<ChallengeData> {
+export async function fetchActiveChallenge(): Promise<ChallengeData | null> {
   const cached = typeof window !== "undefined" ? localStorage.getItem("valuo_custom_challenge") : null;
-  let localChallenge: ChallengeData = todayChallenge;
+  let localChallenge: ChallengeData | null = null;
   if (cached) {
     try {
-      localChallenge = { ...todayChallenge, ...JSON.parse(cached) };
+      const parsed = JSON.parse(cached);
+      if (parsed && parsed.theme) localChallenge = parsed;
     } catch {}
   }
 
@@ -331,7 +331,7 @@ export async function fetchActiveChallenge(): Promise<ChallengeData> {
 
     if (error || !data) return localChallenge;
 
-    const challenge = {
+    const challenge: ChallengeData = {
       id: data.id,
       theme: data.theme,
       date: new Date(data.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
@@ -583,12 +583,6 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
         };
       });
     }
-  }
-
-  // Ensure pinnedGameMasterPost is present if not in fetched posts
-  const hasPinned = posts.some((p) => p.isPinned);
-  if (!hasPinned) {
-    posts = [pinnedGameMasterPost, ...posts];
   }
 
   // Rehydrate local recruitment cache (for demo or offline / fast display)

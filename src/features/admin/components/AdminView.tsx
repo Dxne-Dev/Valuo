@@ -30,7 +30,7 @@ import {
 
 export type AdminViewProps = {
   currentUserId?: string | null;
-  activeChallenge: ChallengeData;
+  activeChallenge?: ChallengeData | null;
   mysteryItem: MysteryItemData;
   posts: FeedPost[];
   onChallengeUpdated: (challenge: ChallengeData) => void;
@@ -85,9 +85,20 @@ export default function AdminView({
   });
   const [squadsList, setSquadsList] = useState<AdminSquadSummary[]>([]);
 
-  const [theme, setTheme] = useState(activeChallenge.theme);
-  const [brief, setBrief] = useState(activeChallenge.brief);
-  const [remaining, setRemaining] = useState(activeChallenge.remaining || "6 h 24");
+  const [theme, setTheme] = useState(activeChallenge?.theme || "Une touche de rouge");
+  const [brief, setBrief] = useState(
+    activeChallenge?.brief ||
+      "Photographie un objet rouge qui a déjà vécu. Un détail, une texture, une histoire — avant minuit.",
+  );
+  const [remaining, setRemaining] = useState(activeChallenge?.remaining || "6 h 24");
+
+  useEffect(() => {
+    if (activeChallenge) {
+      setTheme(activeChallenge.theme);
+      setBrief(activeChallenge.brief);
+      setRemaining(activeChallenge.remaining || "6 h 24");
+    }
+  }, [activeChallenge]);
 
   const [announcementPhoto, setAnnouncementPhoto] = useState(media.redPhone);
   const [announcementCaption, setAnnouncementCaption] = useState(
@@ -276,15 +287,19 @@ export default function AdminView({
                   En cours
                 </span>
               </div>
-              <h3 className="mt-2 font-display text-xl font-bold text-[#173f35]">{activeChallenge.theme}</h3>
-              <p className="mt-1 text-xs text-[#6e7d75] leading-relaxed">{activeChallenge.brief}</p>
+              <h3 className="mt-2 font-display text-xl font-bold text-[#173f35]">
+                {activeChallenge ? activeChallenge.theme : "Aucun défi programmé"}
+              </h3>
+              <p className="mt-1 text-xs text-[#6e7d75] leading-relaxed">
+                {activeChallenge ? activeChallenge.brief : "Configurez et lancez le défi du jour pour l'afficher sur le feed des joueurs."}
+              </p>
               <div className="mt-4 flex items-center gap-3 pt-3 border-t border-[#173f35]/6">
                 <button
                   type="button"
                   onClick={() => handleTabClick("challenge")}
                   className="rounded-full bg-[#173f35] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#23584b]"
                 >
-                  Modifier le thème
+                  {activeChallenge ? "Modifier le thème" : "Lancer le défi"}
                 </button>
               </div>
             </div>
