@@ -133,12 +133,12 @@ CREATE TABLE IF NOT EXISTS public.squad_members (
     points INTEGER NOT NULL DEFAULT 0,
     rank_change INTEGER NOT NULL DEFAULT 0,
     current_estimate NUMERIC(10, 2),
-    joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT squad_user_unique UNIQUE NULLS NOT DISTINCT (squad_id, user_id)
+    joined_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_squad_members_squad_id ON public.squad_members(squad_id);
 CREATE INDEX IF NOT EXISTS idx_squad_members_user_id ON public.squad_members(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_squad_members_unique_user ON public.squad_members(squad_id, user_id) WHERE user_id IS NOT NULL;
 
 -- ============================================================================
 -- 8. MYSTERY BOXES (Objets mystères quotidiens & Juste Prix)
@@ -364,6 +364,9 @@ CREATE POLICY "Squads readable by all authenticated" ON public.squads FOR SELECT
 DROP POLICY IF EXISTS "Authenticated users can create squads" ON public.squads;
 CREATE POLICY "Authenticated users can create squads" ON public.squads FOR INSERT TO authenticated WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users can delete own squads" ON public.squads;
+CREATE POLICY "Users can delete own squads" ON public.squads FOR DELETE TO authenticated USING (auth.uid() = created_by);
+
 DROP POLICY IF EXISTS "Squad members readable by authenticated" ON public.squad_members;
 CREATE POLICY "Squad members readable by authenticated" ON public.squad_members FOR SELECT TO authenticated USING (true);
 
@@ -372,6 +375,9 @@ CREATE POLICY "Authenticated users can join squads" ON public.squad_members FOR 
 
 DROP POLICY IF EXISTS "Users can update their squad member stats" ON public.squad_members;
 CREATE POLICY "Users can update their squad member stats" ON public.squad_members FOR UPDATE TO authenticated USING (auth.uid() = user_id OR is_npc = true);
+
+DROP POLICY IF EXISTS "Users can leave squads" ON public.squad_members;
+CREATE POLICY "Users can leave squads" ON public.squad_members FOR DELETE TO authenticated USING (auth.uid() = user_id OR is_npc = true);
 
 -- Mystery Boxes & Estimates
 DROP POLICY IF EXISTS "Mystery boxes readable by all" ON public.mystery_boxes;

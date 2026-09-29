@@ -21,6 +21,7 @@ import {
 import { type ChangeEvent, useState } from "react";
 import { avatarPresets, type UserProfile } from "../data";
 import { updateUserPassword } from "../lib/api";
+import { sanitizeInput, validatePassword } from "../lib/security";
 import Logo from "./Logo";
 
 type OnboardingViewProps = {
@@ -68,8 +69,9 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
   async function handleFinish() {
     setPwdError("");
     if (password.trim()) {
-      if (password.length < 6) {
-        setPwdError("Le mot de passe doit contenir au moins 6 caractères.");
+      const validation = validatePassword(password.trim());
+      if (!validation.isValid) {
+        setPwdError(validation.error || "Mot de passe non valide.");
         return;
       }
       if (password !== confirmPassword) {
@@ -78,8 +80,8 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
       }
     }
 
-    const chosenName = name.trim() || initialName || "Chasseur VALUO";
-    const chosenCity = city.trim() || "France";
+    const chosenName = sanitizeInput(name.trim() || initialName || "Joueur VALUO");
+    const chosenCity = sanitizeInput(city.trim() || "France");
     const chosenAvatar = selectedAvatar;
 
     // Call and await onComplete first so localStorage, state, and DB are committed
@@ -305,7 +307,7 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
                     1. Défi Photo Quotidien
                   </h3>
                   <p className="mt-0.5 text-xs leading-relaxed text-[#68766e]">
-                    Chaque jour à 8h, un thème visuel est imposé. Snap ta trouvaille (objet insolite, design, texture) avant minuit.
+                    Chaque jour à 8h, un nouveau thème visuel est lancé. Capture et partage ta photo avant minuit.
                   </p>
                 </div>
               </div>
@@ -532,7 +534,7 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Au moins 6 caractères"
+                    placeholder="Au moins 8 caractères (lettres et chiffres)"
                     className="w-full rounded-2xl border-2 border-[#173f35]/10 bg-white py-3.5 pl-11 pr-11 text-sm text-[#173f35] outline-none transition focus:border-[#e9683a] focus:ring-4 focus:ring-[#e9683a]/10"
                   />
                   <button

@@ -1,16 +1,16 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, Loader2, X } from "lucide-react";
-import { useEffect, useState } from "react";
-import AuthScreen from "./components/AuthScreen";
-import AdminView from "./components/AdminView";
-import ComposerModal from "./components/ComposerModal";
-import FeedView from "./components/FeedView";
-import GameView from "./components/GameView";
-import GroupView from "./components/GroupView";
+import { AlertTriangle, CheckCircle2, Loader2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { AdminView } from "@/features/admin";
+import { AuthScreen } from "@/features/auth";
+import { ComposerModal, FeedView } from "@/features/feed";
+import { GameView } from "@/features/game";
+import { GroupView } from "@/features/groups";
 import { DesktopNavigation, MobileHeader, MobileNavigation, type Tab } from "./components/Navigation";
-import NotificationsView from "./components/NotificationsView";
-import OnboardingView from "./components/OnboardingView";
-import ProfileView from "./components/ProfileView";
+import { NotificationsView } from "@/features/notifications";
+import { OnboardingView } from "@/features/onboarding";
+import { ProfileView } from "@/features/profile";
 import Logo from "./components/Logo";
 import { getValuoCycleInfo } from "./lib/dateUtils";
 
@@ -20,7 +20,6 @@ import {
   avatars,
   type FeedPost,
   type GroupData,
-  type GroupMember,
   media,
   pinnedGameMasterPost,
   todayChallenge,
@@ -30,8 +29,10 @@ import {
   addPostComment,
   type ChallengeData,
   createFeedPost,
+  createRecruitmentFeedPostObj,
   createSquadInDb,
   deleteFeedPost,
+  deleteRecruitmentPostBySquadCode,
   fetchActiveChallenge,
   fetchFeedPosts,
   fetchMysteryItem,
@@ -43,7 +44,11 @@ import {
   getCurrentSession,
   isSupabaseConfigured,
   joinSquadByCode,
+  leaveSquadInDb,
   markNotificationsAsReadInDb,
+  removeActiveRecruitmentLocalCache,
+  republishSquadRecruitment,
+  saveActiveRecruitmentLocalCache,
   saveUserProfile,
   signOutUser,
   toggleFriendshipInDb,
@@ -58,11 +63,11 @@ type BeforeInstallPromptEvent = Event & {
 
 // Base profile template for brand new users (0 stats)
 const cleanUserProfile: UserProfile = {
-  name: "Chasseur VALUO",
+  name: "Joueur VALUO",
   city: "France",
   avatar: avatarPresets[0].url,
   cover: media.camera,
-  bio: "Passionné(e) de chine, d'objets et de design.",
+  bio: "Créateur visuel & joueur sur VALUO.",
   memberSince: "Septembre 2026",
 };
 
@@ -71,14 +76,27 @@ const crossTabChannel = typeof window !== "undefined" && "BroadcastChannel" in w
   ? new BroadcastChannel("valuo_auth_sync")
   : null;
 
+function getTabFromPathname(pathname: string): Tab {
+  const clean = pathname.toLowerCase().replace(/^\//, "").split("/")[0];
+  if (clean === "game") return "game";
+  if (clean === "group" || clean === "squad" || clean === "escouade") return "group";
+  if (clean === "profile" || clean === "profil") return "profile";
+  if (clean === "notifications") return "notifications";
+  if (clean === "admin") return "admin";
+  return "feed";
+}
+
 export default function App() {
+  const location = useLocation();
+  const routerNavigate = useNavigate();
+  const activeTab: Tab = getTabFromPathname(location.pathname);
+
   const [authLoading, setAuthLoading] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [isDemoUser, setIsDemoUser] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [authIdentifier, setAuthIdentifier] = useState("");
-  const [activeTab, setActiveTab] = useState<Tab>("feed");
   const [currentUser, setCurrentUser] = useState<UserProfile>(cleanUserProfile);
   const [friends, setFriends] = useState<string[]>([]);
   const [group, setGroup] = useState<GroupData | null>(null);
@@ -117,10 +135,10 @@ export default function App() {
   useEffect(() => {
     async function initAuth() {
       if (isSupabaseConfigured) {
+        setAuthLoading(true);
         const session = await getCurrentSession();
         if (session?.user) {
           setUserId(session.user.id);
-          setSignedIn(true);
           setIsDemoUser(false);
           if (session.user.email) setAuthIdentifier(session.user.email);
 
@@ -130,21 +148,32 @@ export default function App() {
           }
 
           await loadUserData(session.user.id, session.user);
+          setSignedIn(true);
         } else {
-          // If no active Supabase session, reset flags and stop loading
-          localStorage.removeItem("valuo_demo_user");
-          setSignedIn(false);
-          setUserId(null);
-          setIsDemoUser(false);
-          setIsOnboarded(false);
+          // If no active Supabase session, check if demo user is active in localStorage
+          const isDemoActive = typeof window !== "undefined" && localStorage.getItem("valuo_demo_user") === "true";
+          if (isDemoActive) {
+            setIsDemoUser(true);
+            setSignedIn(true);
+            setIsOnboarded(true);
+            const cachedSquad = localStorage.getItem("valuo_demo_squad");
+            if (cachedSquad) {
+              try { setGroup(JSON.parse(cachedSquad)); } catch {}
+            }
+          } else {
+            setSignedIn(false);
+            setUserId(null);
+            setIsDemoUser(false);
+            setIsOnboarded(false);
+          }
           setAuthLoading(false);
         }
 
         // Supabase Auth State Change Listener
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
           if (newSession?.user) {
+            setAuthLoading(true);
             setUserId(newSession.user.id);
-            setSignedIn(true);
             setIsDemoUser(false);
             if (newSession.user.email) setAuthIdentifier(newSession.user.email);
 
@@ -154,6 +183,7 @@ export default function App() {
             }
 
             await loadUserData(newSession.user.id, newSession.user);
+            setSignedIn(true);
             crossTabChannel?.postMessage({ type: "AUTH_LOGIN", userId: newSession.user.id });
           } else if (event === "SIGNED_OUT") {
             setSignedIn(false);
@@ -178,13 +208,14 @@ export default function App() {
 
     // Cross-tab broadcast listener
     if (crossTabChannel) {
-      crossTabChannel.onmessage = (event) => {
+      crossTabChannel.onmessage = (event: MessageEvent) => {
         if (event.data?.type === "AUTH_LOGIN") {
-          setSignedIn(true);
           setIsDemoUser(false);
           if (event.data.userId) {
             setUserId(event.data.userId);
-            loadUserData(event.data.userId);
+            loadUserData(event.data.userId).then(() => {
+              setSignedIn(true);
+            });
           }
         } else if (event.data?.type === "AUTH_LOGOUT") {
           setSignedIn(false);
@@ -223,71 +254,90 @@ export default function App() {
     }
   }
 
+  const activeLoadPromiseRef = useRef<Promise<void> | null>(null);
+
   async function loadUserData(uid: string, sessionUser?: any) {
-    try {
-      const isLocalOnboarded = localStorage.getItem(`valuo_onboarded_${uid}`) === "true";
-      const profile = await fetchUserProfile(uid);
-
-      const isUserAdmin = Boolean(
-        profile?.isAdmin === true ||
-        sessionUser?.email === "alasanemomo244@gmail.com" ||
-        authIdentifier === "alasanemomo244@gmail.com"
-      );
-
-      const hasCompletedOnboarding = Boolean(
-        isLocalOnboarded ||
-        isUserAdmin ||
-        sessionUser?.user_metadata?.needs_password_change === false ||
-        sessionUser?.user_metadata?.customized === true
-      );
-
-      if (profile) {
-        setCurrentUser(profile);
-      } else {
-        const cached = typeof window !== "undefined" ? localStorage.getItem(`valuo_user_profile_${uid}`) : null;
-        let localProfile: UserProfile | null = null;
-        if (cached) {
-          try { localProfile = JSON.parse(cached); } catch {}
-        }
-        if (localProfile) {
-          setCurrentUser(localProfile);
-        } else {
-          const emailFallback = sessionUser?.email || authIdentifier;
-          const fallbackName = emailFallback && emailFallback.includes("@")
-            ? emailFallback.split("@")[0].charAt(0).toUpperCase() + emailFallback.split("@")[0].slice(1)
-            : "Chasseur VALUO";
-          setCurrentUser({
-            ...cleanUserProfile,
-            name: fallbackName,
-          });
-        }
-      }
-
-      setIsOnboarded(hasCompletedOnboarding);
-      if (hasCompletedOnboarding && typeof window !== "undefined") {
-        localStorage.setItem(`valuo_onboarded_${uid}`, "true");
-      }
-
-      if (isUserAdmin) {
-        setActiveTab("admin");
-      }
-
-      const userSquad = await fetchUserSquad(uid);
-      if (userSquad) setGroup(userSquad);
-
-      const userFriends = await fetchUserFriends(uid);
-      if (userFriends) setFriends(userFriends);
-
-      const userNotifs = await fetchUserNotifications(uid);
-      if (userNotifs) setNotifications(userNotifs);
-
-      const livePosts = await fetchFeedPosts(uid);
-      if (livePosts && livePosts.length > 0) setPosts(livePosts);
-    } catch (err) {
-      console.warn("Could not load user data:", err);
-    } finally {
-      setAuthLoading(false);
+    if (activeLoadPromiseRef.current) {
+      return activeLoadPromiseRef.current;
     }
+
+    activeLoadPromiseRef.current = (async () => {
+      try {
+        const isLocalOnboarded = localStorage.getItem(`valuo_onboarded_${uid}`) === "true";
+        const profile = await fetchUserProfile(uid);
+
+        const isUserAdmin = Boolean(
+          profile?.isAdmin === true ||
+          sessionUser?.email === "alasanemomo244@gmail.com" ||
+          authIdentifier === "alasanemomo244@gmail.com"
+        );
+
+        const isTempPassword = Boolean(sessionUser?.user_metadata?.needs_password_change === true);
+
+        const hasCompletedOnboarding = Boolean(
+          isLocalOnboarded ||
+          isUserAdmin ||
+          !isTempPassword ||
+          sessionUser?.user_metadata?.customized === true
+        );
+
+        if (profile) {
+          setCurrentUser(profile);
+        } else {
+          const cached = typeof window !== "undefined" ? localStorage.getItem(`valuo_user_profile_${uid}`) : null;
+          let localProfile: UserProfile | null = null;
+          if (cached) {
+            try { localProfile = JSON.parse(cached); } catch {}
+          }
+          if (localProfile) {
+            setCurrentUser(localProfile);
+          } else {
+            const emailFallback = sessionUser?.email || authIdentifier;
+            const fallbackName = emailFallback && emailFallback.includes("@")
+              ? emailFallback.split("@")[0].charAt(0).toUpperCase() + emailFallback.split("@")[0].slice(1)
+              : "Joueur VALUO";
+            setCurrentUser({
+              ...cleanUserProfile,
+              name: fallbackName,
+            });
+          }
+        }
+
+        setIsOnboarded(hasCompletedOnboarding);
+        if (hasCompletedOnboarding && typeof window !== "undefined") {
+          localStorage.setItem(`valuo_onboarded_${uid}`, "true");
+        }
+
+        if (isUserAdmin && location.pathname === "/") {
+          routerNavigate("/admin");
+        }
+
+        const userSquad = await fetchUserSquad(uid);
+        if (userSquad) {
+          setGroup(userSquad);
+          if (userSquad.members.length >= 4) {
+            removeActiveRecruitmentLocalCache(userSquad.code);
+            await deleteRecruitmentPostBySquadCode(userSquad.code);
+          }
+        }
+
+        const userFriends = await fetchUserFriends(uid);
+        if (userFriends) setFriends(userFriends);
+
+        const userNotifs = await fetchUserNotifications(uid);
+        if (userNotifs) setNotifications(userNotifs);
+
+        const livePosts = await fetchFeedPosts(uid);
+        if (livePosts && livePosts.length > 0) setPosts(livePosts);
+      } catch (err) {
+        console.warn("Could not load user data:", err);
+      } finally {
+        setAuthLoading(false);
+        activeLoadPromiseRef.current = null;
+      }
+    })();
+
+    return activeLoadPromiseRef.current;
   }
 
   const isAdminUser = Boolean(
@@ -295,25 +345,24 @@ export default function App() {
     authIdentifier === "alasanemomo244@gmail.com"
   );
 
-  // Check URL query for direct admin access (?admin=true or ?mode=admin)
+  // Admin route guard: if a non-admin accesses /admin, redirect them safely to /
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("admin") === "true" || params.get("mode") === "admin") {
-        if (isAdminUser) {
-          setActiveTab("admin");
-        }
-      }
+    if (activeTab === "admin" && !authLoading && signedIn && !isAdminUser) {
+      setNotice("Accès réservé aux administrateurs.");
+      routerNavigate("/", { replace: true });
     }
-  }, [isAdminUser]);
+  }, [activeTab, authLoading, signedIn, isAdminUser, routerNavigate]);
 
   function navigate(tab: Tab) {
     if (tab === "admin" && !isAdminUser) {
       setNotice("Accès réservé aux administrateurs.");
-      setActiveTab("feed");
+      routerNavigate("/", { replace: true });
       return;
     }
-    setActiveTab(tab);
+    const targetPath = tab === "feed" ? "/" : `/${tab}`;
+    if (location.pathname !== targetPath) {
+      routerNavigate(targetPath);
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -360,115 +409,241 @@ export default function App() {
     }
   }
 
-  async function createGroup(name: string, invitedFriends: string[]) {
+  const [squadConfirmModal, setSquadConfirmModal] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: () => Promise<void>;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    action: async () => {},
+  });
+
+  async function executeCreateGroup(name: string, invitedFriends: string[]) {
     if (userId) {
-      const squad = await createSquadInDb(userId, name, invitedFriends);
+      const squad = await createSquadInDb(userId, name, invitedFriends, false);
       if (squad) {
         setGroup(squad);
-        setNotice(`L'escouade « ${name} » a été créée avec succès !`);
-        return;
+        setNotice(`L'escouade « ${name} » a été créée avec succès ! Code : ${squad.code}`);
+      } else {
+        setNotice("Erreur lors de la création de l'escouade. Veuillez réessayer.");
       }
+      return;
     }
 
-    // Local fallback
-    const newMembers: GroupMember[] = [
-      { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: 0, change: 0, estimate: null },
-    ];
-
-    invitedFriends.forEach((f, idx) => {
-      newMembers.push({
-        id: idx + 2,
-        name: f.split(" ")[0],
-        avatar: avatars.camille,
-        points: 0,
-        change: 0,
-        estimate: 60 + idx * 5,
-      });
-    });
-
-    while (newMembers.length < 4) {
-      const npcNames = ["Léon (IA)", "Arthur (IA)", "Jeanne (IA)"];
-      const npcIdx = newMembers.length;
-      newMembers.push({
-        id: npcIdx + 1,
-        name: npcNames[npcIdx - 1] || `Rival ${npcIdx} (IA)`,
-        avatar: avatars.samir,
-        points: 0,
-        change: 0,
-        estimate: 55 + npcIdx * 8,
-        isNpc: true,
-      });
+    if (isDemoUser) {
+      const randomCode = `VALUO-${Math.floor(100 + Math.random() * 900)}`;
+      const demoSquad: GroupData = {
+        id: `grp-${Date.now()}`,
+        name,
+        code: randomCode,
+        week: 38,
+        members: [
+          { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: 0, change: 0, estimate: null },
+          ...invitedFriends.map((f, i) => ({
+            id: i + 2,
+            name: f.split(" ")[0],
+            avatar: avatars.camille,
+            points: 0,
+            change: 0,
+            estimate: null,
+          })),
+        ],
+      };
+      setGroup(demoSquad);
+      localStorage.setItem("valuo_demo_squad", JSON.stringify(demoSquad));
+      setNotice(`L'escouade « ${name} » a été créée avec succès ! Code : ${randomCode}`);
     }
-
-    const randomCode = `VALUO-${Math.floor(100 + Math.random() * 900)}`;
-    setGroup({
-      id: `grp-${Date.now()}`,
-      name,
-      code: randomCode,
-      week: 38,
-      members: newMembers,
-    });
-    setNotice(`L'escouade « ${name} » a été créée avec succès !`);
   }
 
-  async function joinGroup(code: string) {
+  function createGroup(name: string, invitedFriends: string[]) {
+    if (group) {
+      setSquadConfirmModal({
+        open: true,
+        title: "Créer une nouvelle escouade ?",
+        description: `Tu fais actuellement partie de l'escouade « ${group.name} ». En créant cette nouvelle escouade, tu quitteras définitivement ton escouade actuelle.`,
+        action: async () => {
+          await executeCreateGroup(name, invitedFriends);
+        },
+      });
+      return;
+    }
+    executeCreateGroup(name, invitedFriends);
+  }
+
+  async function executeJoinGroup(code: string) {
     if (userId) {
       const squad = await joinSquadByCode(userId, code);
       if (squad) {
         setGroup(squad);
-        setNotice(`Tu as rejoint l'escouade ${code} !`);
-        return;
+        if (squad.members.length >= 4) {
+          removeActiveRecruitmentLocalCache(squad.code);
+          await deleteRecruitmentPostBySquadCode(squad.code);
+          setPosts((prev) => prev.filter((p) => p.squadCode !== squad.code));
+        }
+        setNotice(`Tu as rejoint l'escouade « ${squad.name} » (${code}) !`);
+        navigate("group");
+      } else {
+        setNotice("Code d'escouade introuvable ou escouade déjà complète.");
       }
+      return;
     }
 
-    const newMembers: GroupMember[] = [
-      { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: 0, change: 0, estimate: null },
-      { id: 2, name: "Maxime", avatar: avatars.thomas, points: 210, change: 25, estimate: 65 },
-      { id: 3, name: "Chloé", avatar: avatars.ines, points: 195, change: -5, estimate: 70 },
-      { id: 4, name: "Oscar (IA)", avatar: avatars.hugo, points: 130, change: -15, estimate: 80, isNpc: true },
-    ];
-
-    setGroup({
-      id: `grp-${Date.now()}`,
-      name: `Escouade ${code}`,
-      code,
-      week: 38,
-      members: newMembers,
-    });
-    setNotice(`Tu as rejoint l'escouade ${code} !`);
+    if (isDemoUser) {
+      const demoSquad: GroupData = {
+        id: `grp-${Date.now()}`,
+        name: `Escouade ${code}`,
+        code,
+        week: 38,
+        members: [
+          { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: 0, change: 0, estimate: null },
+        ],
+      };
+      setGroup(demoSquad);
+      localStorage.setItem("valuo_demo_squad", JSON.stringify(demoSquad));
+      setNotice(`Tu as rejoint l'escouade ${code} !`);
+      navigate("group");
+    }
   }
 
-  async function autoMatch() {
+  function joinGroup(code: string) {
+    if (group) {
+      if (group.code === code) {
+        setNotice("Tu es déjà membre de cette escouade.");
+        return;
+      }
+      setSquadConfirmModal({
+        open: true,
+        title: "Rejoindre une autre escouade ?",
+        description: `Tu fais actuellement partie de l'escouade « ${group.name} ». En rejoignant cette escouade (${code}), tu quitteras définitivement ton escouade actuelle.`,
+        action: async () => {
+          await executeJoinGroup(code);
+        },
+      });
+      return;
+    }
+    executeJoinGroup(code);
+  }
+
+  async function executeAutoMatch() {
+    const squadName = `Escouade Express #${Math.floor(100 + Math.random() * 900)}`;
+
     if (userId) {
-      const squad = await createSquadInDb(userId, "Les As du Flair");
+      // 1. Create real squad with only the creator (no NPCs)
+      const squad = await createSquadInDb(userId, squadName, [], false);
       if (squad) {
         setGroup(squad);
-        setNotice("Matchmaking réussi ! Ton escouade est prête.");
-        return;
+        saveActiveRecruitmentLocalCache(squad.code, squad.name);
+
+        // 2. Prepare and immediately inject recruitment post in React state
+        const newRecruitmentPost = createRecruitmentFeedPostObj(squad.code, squad.name);
+        setPosts((prev) => {
+          const pinned = prev.filter((p) => p.isPinned);
+          const unpinned = [newRecruitmentPost, ...prev.filter((p) => !p.isPinned && p.squadCode !== squad.code)];
+          return [...pinned, ...unpinned];
+        });
+
+        // 3. Persist recruitment post in DB asynchronously
+        try {
+          await createFeedPost(
+            userId,
+            "",
+            "Recherche 3 coéquipiers pour relever les défis de la semaine dans mon escouade ! Rejoins-nous en 1 clic.",
+            currentUser.city,
+            undefined,
+            { code: squad.code, name: squad.name },
+          );
+        } catch (postErr) {
+          console.warn("Could not post auto recruitment to feed:", postErr);
+        }
+
+        setNotice("Escouade créée ! L'avis de recrutement a été partagé sur le Feed.");
+        navigate("group");
+      } else {
+        setNotice("Erreur lors de la création de l'escouade. Veuillez réessayer.");
       }
+      return;
     }
 
-    const randomCode = `VALUO-${Math.floor(100 + Math.random() * 900)}`;
-    const newMembers: GroupMember[] = [
-      { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: isDemoUser ? 248 : 0, change: 0, estimate: null },
-      { id: 2, name: "Camille", avatar: avatars.camille, points: 221, change: 22, estimate: 72 },
-      { id: 3, name: "Samir", avatar: avatars.samir, points: 186, change: -8, estimate: 49 },
-      { id: 4, name: "Marcel", avatar: avatars.hugo, points: 159, change: -12, estimate: 95, isNpc: true },
-    ];
+    if (isDemoUser) {
+      const randomCode = `VALUO-${Math.floor(100 + Math.random() * 900)}`;
+      const demoSquad: GroupData = {
+        id: `grp-${Date.now()}`,
+        name: squadName,
+        code: randomCode,
+        week: 38,
+        members: [
+          { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: 0, change: 0, estimate: null },
+        ],
+      };
+      setGroup(demoSquad);
+      localStorage.setItem("valuo_demo_squad", JSON.stringify(demoSquad));
+      saveActiveRecruitmentLocalCache(randomCode, squadName);
 
-    setGroup({
-      id: `grp-${Date.now()}`,
-      name: "La Bande à Dédé",
-      code: randomCode,
-      week: 38,
-      members: newMembers,
-    });
-    setNotice("Matchmaking réussi ! Ton escouade est prête.");
+      const demoRecruitmentPost = createRecruitmentFeedPostObj(randomCode, squadName);
+
+      setPosts((prev) => {
+        const pinned = prev.filter((p) => p.isPinned);
+        const unpinned = [demoRecruitmentPost, ...prev.filter((p) => !p.isPinned && p.squadCode !== randomCode)];
+        return [...pinned, ...unpinned];
+      });
+      setNotice("Escouade créée ! L'avis de recrutement a été partagé sur le Feed.");
+      navigate("group");
+    }
   }
 
-  function leaveGroup() {
+  function autoMatch() {
+    if (group) {
+      setSquadConfirmModal({
+        open: true,
+        title: "Lancer un nouveau matchmaking ?",
+        description: `Tu fais actuellement partie de l'escouade « ${group.name} ». En lançant un nouveau matchmaking, tu quitteras ton groupe actuel pour créer une nouvelle escouade.`,
+        action: async () => {
+          await executeAutoMatch();
+        },
+      });
+      return;
+    }
+    executeAutoMatch();
+  }
+
+  async function republishRecruitment() {
+    if (!group) return;
+
+    saveActiveRecruitmentLocalCache(group.code, group.name);
+    const recruitmentPost = createRecruitmentFeedPostObj(group.code, group.name);
+
+    setPosts((prev) => {
+      const pinned = prev.filter((p) => p.isPinned);
+      const unpinned = [recruitmentPost, ...prev.filter((p) => !p.isPinned && p.squadCode !== group.code)];
+      return [...pinned, ...unpinned];
+    });
+    setNotice("Avis de recrutement republié sur le Feed !");
+
+    if (userId) {
+      await republishSquadRecruitment(userId, group.code, group.name, currentUser.city);
+    }
+  }
+
+  async function leaveGroup() {
+    const currentGroupId = group?.id;
+    const currentGroupCode = group?.code;
+
     setGroup(null);
+    localStorage.removeItem("valuo_demo_squad");
+
+    if (currentGroupCode) {
+      removeActiveRecruitmentLocalCache(currentGroupCode);
+      await deleteRecruitmentPostBySquadCode(currentGroupCode);
+      setPosts((prev) => prev.filter((p) => p.squadCode !== currentGroupCode));
+    }
     setNotice("Tu as quitté ton escouade.");
+
+    if (userId) {
+      await leaveSquadInDb(userId, currentGroupId, currentGroupCode);
+    }
   }
 
   async function publish(photo: string, caption: string) {
@@ -484,10 +659,11 @@ export default function App() {
       comments: [],
     };
 
-    setPosts((current) => [
-      current[0]?.isPinned ? current[0] : newPost,
-      ...(current[0]?.isPinned ? [newPost, ...current.slice(1)] : current),
-    ]);
+    setPosts((current) => {
+      const pinned = current.filter((p) => p.isPinned);
+      const unpinned = [newPost, ...current.filter((p) => !p.isPinned)];
+      return [...pinned, ...unpinned];
+    });
     setComposerOpen(false);
     setNotice("Ta photo est publiée dans le défi du jour.");
     navigate("feed");
@@ -543,8 +719,8 @@ export default function App() {
     const shareData = {
       title: post ? `${post.author} · ${todayChallenge.theme}` : "VALUO",
       text: post
-        ? `Regarde cette trouvaille pour le défi VALUO du jour « ${todayChallenge.theme} » !`
-        : `Rejoins mon escouade sur VALUO (Code: ${group?.code || "VALUO-789"}) et montre-nous ton flair !`,
+        ? `Regarde ma photo pour le défi VALUO du jour « ${todayChallenge.theme} » !`
+        : `Rejoins mon escouade sur VALUO (Code: ${group?.code || "VALUO-789"}) et relève le défi de la semaine !`,
       url: window.location.href,
     };
     if (navigator.share) {
@@ -591,13 +767,14 @@ export default function App() {
     } else if (newUid) {
       setIsDemoUser(false);
       localStorage.removeItem("valuo_demo_user");
+      setAuthLoading(true);
 
       const isUserAdmin = Boolean(
         identifier === "alasanemomo244@gmail.com" ||
         localStorage.getItem(`valuo_user_profile_${newUid}`)?.includes('"isAdmin":true')
       );
 
-      // Determine initial onboarded state
+      // Determine initial onboarded state (will be refined in loadUserData)
       const isAlreadyOnboarded = Boolean(
         !isTempPassword ||
         isUserAdmin ||
@@ -605,8 +782,8 @@ export default function App() {
       );
 
       setIsOnboarded(isAlreadyOnboarded);
-      if (isUserAdmin) {
-        setActiveTab("admin");
+      if (isUserAdmin && location.pathname === "/") {
+        routerNavigate("/admin");
       }
 
       // Check if user already has a saved profile in localStorage
@@ -618,8 +795,8 @@ export default function App() {
         } catch {}
       }
 
-      setSignedIn(true);
       await loadUserData(newUid);
+      setSignedIn(true);
     } else {
       setSignedIn(true);
     }
@@ -683,7 +860,7 @@ export default function App() {
     return <AuthScreen onAuth={handleAuthSuccess} />;
   }
 
-  if (!isOnboarded) {
+  if (!isOnboarded && !authLoading) {
     return (
       <OnboardingView
         initialIdentifier={authIdentifier}
@@ -742,6 +919,7 @@ export default function App() {
                     onOpenComposer={() => setComposerOpen(true)}
                     onShare={share}
                     onAddComment={addComment}
+                    onJoinSquad={joinGroup}
                   />
                 )}
                 {activeTab === "game" && (
@@ -762,6 +940,7 @@ export default function App() {
                     onLeaveGroup={leaveGroup}
                     onShare={share}
                     onNotice={setNotice}
+                    onRepublishRecruitment={republishRecruitment}
                   />
                 )}
                 {activeTab === "admin" && (
@@ -804,6 +983,57 @@ export default function App() {
         onNavigate={navigate}
       />
       <ComposerModal open={composerOpen} onClose={() => setComposerOpen(false)} onPublish={publish} />
+
+      {/* Modal de confirmation de changement d'escouade */}
+      <AnimatePresence>
+        {squadConfirmModal.open && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSquadConfirmModal((prev) => ({ ...prev, open: false }))}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              className="relative w-full max-w-md overflow-hidden rounded-[28px] bg-white p-6 shadow-2xl sm:p-7"
+            >
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#fff0eb] text-[#e9683a]">
+                <AlertTriangle size={24} />
+              </div>
+              <h3 className="mt-4 text-center font-display text-xl font-semibold text-[#173f35]">
+                {squadConfirmModal.title}
+              </h3>
+              <p className="mt-2 text-center text-xs leading-relaxed text-[#68766e]">
+                {squadConfirmModal.description}
+              </p>
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSquadConfirmModal((prev) => ({ ...prev, open: false }))}
+                  className="flex-1 rounded-full border border-[#173f35]/15 bg-white py-3 text-xs font-extrabold text-[#173f35] hover:bg-[#f5f0e5]"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const action = squadConfirmModal.action;
+                    setSquadConfirmModal((prev) => ({ ...prev, open: false }));
+                    await action();
+                  }}
+                  className="flex-1 rounded-full bg-[#e9683a] py-3 text-xs font-extrabold text-white shadow-lg shadow-[#e9683a]/25 transition hover:bg-[#d9582d]"
+                >
+                  Confirmer
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {notice && (

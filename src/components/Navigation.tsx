@@ -63,7 +63,7 @@ export function DesktopNavigation({
   const [notifOpen, setNotifOpen] = useState(false);
 
   const currentAvatar = profile?.avatar || avatars.lea;
-  const currentName = profile?.name || "Chasseur VALUO";
+  const currentName = profile?.name || "Joueur VALUO";
   const currentCity = profile?.city || "France";
 
   const unreadCount = notifications.filter((n) => !n.read).length;

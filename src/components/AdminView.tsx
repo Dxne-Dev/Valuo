@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { type FeedPost, media } from "../data";
 import {
   type AdminMetrics,
@@ -41,6 +42,21 @@ type AdminViewProps = {
   onNotice: (msg: string) => void;
 };
 
+export type AdminSubTab = "overview" | "challenge" | "announcement" | "mystery" | "posts" | "squads";
+
+function getAdminSubTabFromPathname(pathname: string): AdminSubTab {
+  const parts = pathname.toLowerCase().split("/").filter(Boolean);
+  if (parts[0] === "admin" && parts[1]) {
+    const sub = parts[1];
+    if (sub === "challenge" || sub === "defi") return "challenge";
+    if (sub === "announcement" || sub === "annonce") return "announcement";
+    if (sub === "mystery" || sub === "boite") return "mystery";
+    if (sub === "posts" || sub === "moderation") return "posts";
+    if (sub === "squads" || sub === "escouades") return "squads";
+  }
+  return "overview";
+}
+
 export default function AdminView({
   currentUserId,
   activeChallenge,
@@ -52,7 +68,16 @@ export default function AdminView({
   onPostDeleted,
   onNotice,
 }: AdminViewProps) {
-  const [tab, setTab] = useState<"overview" | "challenge" | "announcement" | "mystery" | "posts" | "squads">("overview");
+  const location = useLocation();
+  const routerNavigate = useNavigate();
+  const tab = getAdminSubTabFromPathname(location.pathname);
+
+  function handleTabClick(subTab: AdminSubTab) {
+    const targetPath = subTab === "overview" ? "/admin" : `/admin/${subTab}`;
+    if (location.pathname !== targetPath) {
+      routerNavigate(targetPath);
+    }
+  }
 
   // Metrics & Squads state
   const [metrics, setMetrics] = useState<AdminMetrics>({
@@ -71,7 +96,7 @@ export default function AdminView({
   // 2. Official Announcement Form
   const [announcementPhoto, setAnnouncementPhoto] = useState(media.redPhone);
   const [announcementCaption, setAnnouncementCaption] = useState(
-    "Défi officiel du jour lancé ! Repérez un objet qui correspond au thème et partagez votre trouvaille avant minuit.",
+    "Défi officiel du jour lancé ! Capturez un objet ou un détail correspondant au thème et partagez votre photo avant minuit.",
   );
   const [isPinned, setIsPinned] = useState(true);
   const [publishingPost, setPublishingPost] = useState(false);
@@ -193,7 +218,7 @@ export default function AdminView({
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setTab(item.id as any)}
+                onClick={() => handleTabClick(item.id as AdminSubTab)}
                 className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold transition ${
                   isActive
                     ? "bg-[#e9683a] text-white shadow-md shadow-[#e9683a]/30"
@@ -264,7 +289,7 @@ export default function AdminView({
               <div className="mt-4 flex items-center gap-3 pt-3 border-t border-[#173f35]/6">
                 <button
                   type="button"
-                  onClick={() => setTab("challenge")}
+                  onClick={() => handleTabClick("challenge")}
                   className="rounded-full bg-[#173f35] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#23584b]"
                 >
                   Modifier le thème
@@ -284,7 +309,7 @@ export default function AdminView({
               <div className="mt-4 flex items-center gap-3 pt-3 border-t border-[#173f35]/6">
                 <button
                   type="button"
-                  onClick={() => setTab("mystery")}
+                  onClick={() => handleTabClick("mystery")}
                   className="rounded-full bg-[#173f35] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#23584b]"
                 >
                   Configurer la box
@@ -313,7 +338,7 @@ export default function AdminView({
                 type="text"
                 value={theme}
                 onChange={(e) => setTheme(e.target.value)}
-                placeholder="Ex: Une touche de rouge, Objet vintage des 70s…"
+                placeholder="Ex: Une touche de rouge, Minimalisme urbain, Reflets…"
                 className="mt-1.5 w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] px-4 py-3.5 text-sm font-bold text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
               />
             </div>
@@ -465,7 +490,7 @@ export default function AdminView({
             </div>
 
             <div>
-              <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Vrai prix brocante constaté (€)</label>
+              <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Vrai prix réel constaté (€)</label>
               <div className="relative mt-1.5">
                 <input
                   type="number"

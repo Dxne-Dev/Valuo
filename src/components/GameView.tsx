@@ -147,7 +147,7 @@ export default function GameView({ group, currentUser, onOpenGroup }: GameViewPr
               >
                 {userRank === 1 ? <Trophy size={28} /> : <Sparkles size={28} />}
               </motion.div>
-              <p className="relative mt-5 text-xs font-bold uppercase tracking-[0.18em] text-[#f3c969]">Prix brocante constaté</p>
+              <p className="relative mt-5 text-xs font-bold uppercase tracking-[0.18em] text-[#f3c969]">Prix réel constaté</p>
               <p className="relative mt-2 font-display text-7xl font-semibold tracking-[-0.05em]">{realPrice} €</p>
               <p className="relative mx-auto mt-4 max-w-lg text-sm leading-relaxed text-white/65">
                 {userRank === 1

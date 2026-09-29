@@ -5,6 +5,7 @@ import {
   Check,
   Copy,
   Crown,
+  Eye,
   Plus,
   QrCode,
   Radio,
@@ -17,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { type GroupData, type UserProfile } from "../data";
+import { type GroupData, media, type UserProfile } from "../data";
 
 type GroupViewProps = {
   group: GroupData | null;
@@ -29,6 +30,7 @@ type GroupViewProps = {
   onLeaveGroup: () => void;
   onShare: () => void;
   onNotice: (msg: string) => void;
+  onRepublishRecruitment?: () => void;
 };
 
 export default function GroupView({
@@ -40,6 +42,7 @@ export default function GroupView({
   onLeaveGroup,
   onShare,
   onNotice,
+  onRepublishRecruitment,
 }: GroupViewProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
@@ -48,6 +51,7 @@ export default function GroupView({
   const [groupName, setGroupName] = useState("Les As du Flair");
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [joinCodeInput, setJoinCodeInput] = useState("");
+  const [hoveredHistoryIndex, setHoveredHistoryIndex] = useState<number | null>(null);
 
   function handleCreate(event: FormEvent) {
     event.preventDefault();
@@ -99,6 +103,15 @@ export default function GroupView({
         <div className="flex flex-wrap items-center gap-2">
           {group ? (
             <>
+              {group.members.length < 4 && onRepublishRecruitment && (
+                <button
+                  type="button"
+                  onClick={onRepublishRecruitment}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#e9683a]/30 bg-[#fff6f2] px-4 py-2.5 text-xs font-extrabold text-[#e9683a] transition hover:bg-[#e9683a] hover:text-white"
+                >
+                  <Radio size={15} /> Recruter sur le Feed
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setInviteOpen(true)}
@@ -183,125 +196,346 @@ export default function GroupView({
       ) : (
         <>
           {/* Progression de la semaine */}
-          <section className="mb-8 rounded-[28px] bg-[#173f35] p-6 text-white sm:p-8">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#f3c969]">
-                  Progression de la semaine · Code : <span className="font-mono">{group.code}</span>
-                </p>
-                <p className="mt-2 font-display text-2xl font-semibold">Plus que 2 objets avant le verdict</p>
-              </div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-white/60">
-                <CalendarDays size={16} /> Élimination samedi à 20 h
-              </div>
-            </div>
-            <div className="mt-7 grid grid-cols-6 gap-2 sm:gap-3">
-              {["L", "M", "M", "J", "V", "S"].map((day, index) => (
-                <div key={`${day}-${index}`} className="text-center">
-                  <motion.div
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: 1 }}
-                    transition={{ delay: index * 0.06 }}
-                    className={`h-2 origin-left rounded-full ${index < 3 ? "bg-[#f3c969]" : index === 3 ? "bg-[#e9683a]" : "bg-white/15"}`}
-                  />
-                  <p className={`mt-2 text-[10px] font-extrabold ${index === 3 ? "text-[#e9683a]" : "text-white/45"}`}>{day}</p>
-                </div>
-              ))}
-            </div>
-          </section>
+          {(() => {
+            const currentDayOfWeek = new Date().getDay(); // 0 = Dimanche, 1 = Lundi, ..., 6 = Samedi
+            const activeDayIndex = currentDayOfWeek === 0 ? 6 : currentDayOfWeek - 1;
+            const remainingObjects = activeDayIndex >= 6 ? 0 : Math.max(0, 5 - activeDayIndex);
+            const progressHeadline =
+              activeDayIndex === 5
+                ? "Dernier objet aujourd'hui avant le verdict !"
+                : activeDayIndex >= 6
+                ? "Semaine terminée · Clôture de la ligue"
+                : `Plus que ${remainingObjects} objet${remainingObjects > 1 ? "s" : ""} avant le verdict`;
+            const completedRounds = Math.min(activeDayIndex, 6);
 
-          {/* Classement & Historique */}
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_330px]">
-            <section>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-display text-2xl font-semibold text-[#173f35]">Classement de l'escouade</h2>
-                <span className="text-xs font-bold text-[#8a958f]">Après 3 manches</span>
-              </div>
-              <div className="overflow-hidden rounded-[26px] border border-[#173f35]/8 bg-white">
-                {group.members.map((member, index) => (
-                  <motion.div
-                    key={member.id}
-                    initial={{ opacity: 0, x: -18 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.08 }}
-                    className={`relative flex items-center gap-4 border-b border-[#173f35]/8 p-4 last:border-0 sm:p-5 ${
-                      index === group.members.length - 1 ? "bg-[#fff5f0]" : ""
-                    }`}
-                  >
-                    <span
-                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full font-display text-base font-semibold ${
-                        index === 0 ? "bg-[#f3c969] text-[#173f35]" : "bg-[#f3efe6] text-[#7b8780]"
-                      }`}
-                    >
-                      {index === 0 ? <Crown size={17} fill="currentColor" /> : index + 1}
-                    </span>
-                    <img src={member.avatar} alt="" className="h-12 w-12 rounded-full object-cover" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate font-extrabold text-[#173f35]">
-                          {member.name}
-                          {member.id === 1 ? " (toi)" : ""}
-                        </p>
-                        {member.isNpc && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#e9e5dc] px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-[#748079]">
-                            <Bot size={10} /> IA
+            const daysConfig = [
+              { short: "L", name: "Lundi" },
+              { short: "M", name: "Mardi" },
+              { short: "M", name: "Mercredi" },
+              { short: "J", name: "Jeudi" },
+              { short: "V", name: "Vendredi" },
+              { short: "S", name: "Samedi" },
+            ];
+
+            return (
+              <>
+                <section className="mb-8 rounded-[28px] bg-[#173f35] p-6 text-white sm:p-8">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#f3c969]">
+                        Progression de la semaine · Code : <span className="font-mono">{group.code}</span>
+                      </p>
+                      <p className="mt-2 font-display text-2xl font-semibold">{progressHeadline}</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-semibold text-white/60">
+                      <CalendarDays size={16} /> Élimination samedi à 20 h
+                    </div>
+                  </div>
+
+                  <div className="mt-7 grid grid-cols-6 gap-2 sm:gap-3">
+                    {daysConfig.map((day, index) => {
+                      const isPast = index < activeDayIndex;
+                      const isToday = index === activeDayIndex;
+
+                      return (
+                        <div key={`${day.short}-${index}`} className="text-center">
+                          <motion.div
+                            initial={{ scaleX: 0 }}
+                            animate={{ scaleX: 1 }}
+                            transition={{ delay: index * 0.06 }}
+                            className={`h-2 origin-left rounded-full transition-colors ${
+                              isPast
+                                ? "bg-[#f3c969]"
+                                : isToday
+                                ? "bg-[#e9683a] ring-2 ring-[#e9683a]/30 ring-offset-1 ring-offset-[#173f35]"
+                                : "bg-white/15"
+                            }`}
+                          />
+                          <p
+                            className={`mt-2 text-[10px] font-extrabold ${
+                              isToday
+                                ? "text-[#e9683a]"
+                                : isPast
+                                ? "text-[#f3c969]"
+                                : "text-white/45"
+                            }`}
+                          >
+                            {day.short}
+                          </p>
+                          {isToday && (
+                            <span className="hidden sm:inline-block text-[9px] font-semibold text-[#e9683a]">
+                              En cours
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* Classement & Historique */}
+                <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_330px]">
+                  <section>
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="font-display text-2xl font-semibold text-[#173f35]">Classement de l'escouade</h2>
+                      <span className="text-xs font-bold text-[#8a958f]">
+                        {completedRounds === 0
+                          ? "Manche 1 en cours"
+                          : `Après ${completedRounds} manche${completedRounds > 1 ? "s" : ""}`}
+                      </span>
+                    </div>
+                    <div className="overflow-hidden rounded-[26px] border border-[#173f35]/8 bg-white">
+                      {group.members.map((member, index) => (
+                        <motion.div
+                          key={member.id}
+                          initial={{ opacity: 0, x: -18 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.08 }}
+                          className={`relative flex items-center gap-4 border-b border-[#173f35]/8 p-4 last:border-0 sm:p-5 ${
+                            group.members.length === 4 && index === group.members.length - 1 ? "bg-[#fff5f0]" : ""
+                          }`}
+                        >
+                          <span
+                            className={`grid h-9 w-9 shrink-0 place-items-center rounded-full font-display text-base font-semibold ${
+                              index === 0 ? "bg-[#f3c969] text-[#173f35]" : "bg-[#f3efe6] text-[#7b8780]"
+                            }`}
+                          >
+                            {index === 0 ? <Crown size={17} fill="currentColor" /> : index + 1}
                           </span>
-                        )}
-                      </div>
-                      <p className={`mt-1 text-xs font-bold ${member.change >= 0 ? "text-[#478463]" : "text-[#c66748]"}`}>
-                        {member.change >= 0 ? "+" : ""}
-                        {member.change} pts cette semaine
+                          <img src={member.avatar} alt="" className="h-12 w-12 rounded-full object-cover" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate font-extrabold text-[#173f35]">
+                                {member.name}
+                                {member.id === 1 ? " (toi)" : ""}
+                              </p>
+                              {member.isNpc && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-[#e9e5dc] px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-[#748079]">
+                                  <Bot size={10} /> IA
+                                </span>
+                              )}
+                            </div>
+                            <p className={`mt-1 text-xs font-bold ${member.change >= 0 ? "text-[#478463]" : "text-[#c66748]"}`}>
+                              {member.change >= 0 ? "+" : ""}
+                              {member.change} pts cette semaine
+                            </p>
+                          </div>
+                          <p className="font-display text-2xl font-semibold text-[#173f35]">
+                            {member.points}
+                            <span className="ml-1 font-sans text-[10px] font-bold uppercase text-[#8a958f]">pts</span>
+                          </p>
+                          {group.members.length === 4 && index === group.members.length - 1 && (
+                            <span className="absolute bottom-0 left-0 top-0 w-1 bg-[#e9683a]" />
+                          )}
+                        </motion.div>
+                      ))}
+
+                      {/* Empty slots for private squad */}
+                      {Array.from({ length: Math.max(0, 4 - group.members.length) }).map((_, emptyIdx) => {
+                        const slotNumber = group.members.length + emptyIdx + 1;
+                        return (
+                          <div
+                            key={`empty-slot-${slotNumber}`}
+                            className="flex items-center justify-between border-b border-[#173f35]/8 p-4 last:border-0 sm:p-5 bg-[#faf8f4]/60"
+                          >
+                            <div className="flex items-center gap-4">
+                              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#e8e4dc] font-display text-sm font-bold text-[#8a958f]">
+                                {slotNumber}
+                              </span>
+                              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full border-2 border-dashed border-[#173f35]/20 bg-white text-[#173f35]/40">
+                                <UserPlus size={18} />
+                              </div>
+                              <div>
+                                <p className="font-extrabold text-sm text-[#173f35]/70">Place libre #{slotNumber}</p>
+                                <p className="text-xs text-[#76837c]">En attente d'un ami…</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={copyGroupCode}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-[#173f35]/15 bg-white px-3.5 py-1.5 text-xs font-extrabold text-[#173f35] shadow-sm transition hover:bg-[#173f35] hover:text-white"
+                            >
+                              <Copy size={13} /> Inviter
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 flex items-start gap-3 rounded-2xl bg-[#fff0e9] p-4 text-[#a1482b]">
+                      <ShieldAlert className="mt-0.5 shrink-0" size={18} />
+                      <p className="text-xs leading-relaxed">
+                        <strong>Zone d'élimination :</strong> le joueur en 4e position quittera l'escouade samedi à 20 h et devra rejoindre un nouveau groupe pour la semaine suivante.
                       </p>
                     </div>
-                    <p className="font-display text-2xl font-semibold text-[#173f35]">
-                      {member.points}
-                      <span className="ml-1 font-sans text-[10px] font-bold uppercase text-[#8a958f]">pts</span>
-                    </p>
-                    {index === group.members.length - 1 && <span className="absolute bottom-0 left-0 top-0 w-1 bg-[#e9683a]" />}
-                  </motion.div>
-                ))}
-              </div>
 
-              <div className="mt-4 flex items-start gap-3 rounded-2xl bg-[#fff0e9] p-4 text-[#a1482b]">
-                <ShieldAlert className="mt-0.5 shrink-0" size={18} />
-                <p className="text-xs leading-relaxed">
-                  <strong>Zone d'élimination :</strong> le joueur en 4e position quittera l'escouade samedi à 20 h et devra rejoindre un nouveau groupe pour la semaine suivante.
-                </p>
-              </div>
+                    <div className="mt-6 flex items-center justify-between border-t border-[#173f35]/10 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setCreateOpen(true)}
+                        className="text-xs font-bold text-[#6a7972] hover:text-[#173f35]"
+                      >
+                        + Créer une autre escouade
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onLeaveGroup}
+                        className="text-xs font-bold text-[#b15437] hover:underline"
+                      >
+                        Quitter cette escouade
+                      </button>
+                    </div>
+                  </section>
 
-              <div className="mt-6 flex items-center justify-between border-t border-[#173f35]/10 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setCreateOpen(true)}
-                  className="text-xs font-bold text-[#6a7972] hover:text-[#173f35]"
-                >
-                  + Créer une autre escouade
-                </button>
-                <button
-                  type="button"
-                  onClick={onLeaveGroup}
-                  className="text-xs font-bold text-[#b15437] hover:underline"
-                >
-                  Quitter cette escouade
-                </button>
-              </div>
-            </section>
+                  <section>
+                    <h2 className="mb-4 font-display text-2xl font-semibold text-[#173f35]">Historique de la semaine</h2>
+                    <div className="space-y-3">
+                      {daysConfig.map((day, idx) => {
+                        const isPast = idx < activeDayIndex;
+                        const isToday = idx === activeDayIndex;
 
-            <section>
-              <h2 className="mb-4 font-display text-2xl font-semibold text-[#173f35]">Historique de la semaine</h2>
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 rounded-2xl border border-dashed border-[#173f35]/20 bg-white/50 p-4">
-                  <div className="grid h-12 w-12 place-items-center rounded-xl bg-[#e9683a]/10 font-display text-lg font-semibold text-[#e9683a]">
-                    J4
-                  </div>
-                  <div>
-                    <p className="text-sm font-extrabold text-[#173f35]">Mystery Box du jour</p>
-                    <p className="text-xs text-[#8a958f]">Estimation ouverte jusqu'à 20 h</p>
-                  </div>
+                        const mysteryItems = [
+                          { day: 1, name: "Poste radio vintage années 60", photo: media.radio, price: "85 €" },
+                          { day: 2, name: "Appareil photo argentique", photo: media.camera, price: "120 €" },
+                          { day: 3, name: "Lampe de bureau industrielle", photo: media.desk, price: "95 €" },
+                          { day: 4, name: "Vase en faïence floral", photo: media.mystery, price: "68 €" },
+                          { day: 5, name: "Téléphone à cadran rotatif", photo: media.redPhone, price: "110 €" },
+                          { day: 6, name: "Paire de figurines céramique", photo: media.figurines, price: "75 €" },
+                        ];
+                        const itemData = mysteryItems[idx] || mysteryItems[0];
+
+                        if (isToday) {
+                          return (
+                            <div
+                              key={`hist-${day.short}-${idx}`}
+                              onMouseEnter={() => setHoveredHistoryIndex(idx)}
+                              onMouseLeave={() => setHoveredHistoryIndex(null)}
+                              className="relative group flex items-center justify-between gap-3 rounded-2xl border border-dashed border-[#e9683a]/40 bg-[#fff6f2] p-4 transition-all duration-200 hover:border-[#e9683a] hover:shadow-md cursor-pointer"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#e9683a] font-display text-lg font-semibold text-white">
+                                  J{idx + 1}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-extrabold text-[#173f35]">{day.name} · Mystery Box du jour</p>
+                                  <p className="text-xs font-semibold text-[#e9683a]">Estimation ouverte jusqu'à 20 h</p>
+                                </div>
+                              </div>
+
+                              <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[#e9683a] shadow-sm border border-[#e9683a]/20">
+                                <Eye size={11} /> Aperçu
+                              </span>
+
+                              {/* Link Preview Flottant Format Carré (Desktop uniquement) */}
+                              <AnimatePresence>
+                                {hoveredHistoryIndex === idx && (
+                                  <motion.div
+                                    initial={{ opacity: 0, scale: 0.9, y: 8 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.9, y: 8 }}
+                                    transition={{ duration: 0.18, ease: "easeOut" }}
+                                    className="pointer-events-none absolute bottom-full right-0 mb-3 z-30 hidden md:block w-48 overflow-hidden rounded-2xl border border-[#173f35]/15 bg-white p-2 shadow-2xl"
+                                  >
+                                    <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-[#d9d0bf]">
+                                      <img
+                                        src={itemData.photo}
+                                        alt={itemData.name}
+                                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                      />
+                                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                                      <div className="absolute bottom-2 left-2 right-2 text-white">
+                                        <p className="text-[9px] font-extrabold uppercase tracking-wider text-[#f3c969]">
+                                          Mystery Box J{idx + 1}
+                                        </p>
+                                        <p className="truncate text-xs font-bold">{itemData.name}</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center justify-between px-1.5 pt-2 text-[11px] font-bold text-[#173f35]">
+                                      <span className="text-[#76837c]">Prix révélé à 20 h</span>
+                                      <span className="font-extrabold text-[#e9683a]">Secret</span>
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          );
+                        }
+
+                        if (isPast) {
+                          return (
+                            <div
+                              key={`hist-${day.short}-${idx}`}
+                              onMouseEnter={() => setHoveredHistoryIndex(idx)}
+                              onMouseLeave={() => setHoveredHistoryIndex(null)}
+                              className="relative group flex items-center justify-between gap-3 rounded-2xl border border-[#173f35]/8 bg-white p-4 transition-all duration-200 hover:border-[#173f35]/25 hover:shadow-md cursor-pointer"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#f3c969]/30 font-display text-lg font-semibold text-[#173f35]">
+                                  J{idx + 1}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-extrabold text-[#173f35]">{day.name}</p>
+                                  <p className="text-xs text-[#76837c]">Manche clôturée</p>
+                                </div>
+                              </div>
+
+                              <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-[#fbf8f1] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[#76837c] group-hover:text-[#173f35] group-hover:bg-[#f5f0e5] transition border border-[#173f35]/8">
+                                <Eye size={11} /> Voir
+                              </span>
+
+                              {/* Link Preview Flottant Format Carré (Desktop uniquement) */}
+                              <AnimatePresence>
+                                {hoveredHistoryIndex === idx && (
+                                  <motion.div
+                                    initial={{ opacity: 0, scale: 0.9, y: 8 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.9, y: 8 }}
+                                    transition={{ duration: 0.18, ease: "easeOut" }}
+                                    className="pointer-events-none absolute bottom-full right-0 mb-3 z-30 hidden md:block w-48 overflow-hidden rounded-2xl border border-[#173f35]/15 bg-white p-2 shadow-2xl"
+                                  >
+                                    <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-[#d9d0bf]">
+                                      <img
+                                        src={itemData.photo}
+                                        alt={itemData.name}
+                                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                      />
+                                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                                      <div className="absolute bottom-2 left-2 right-2 text-white">
+                                        <p className="text-[9px] font-extrabold uppercase tracking-wider text-[#f3c969]">
+                                          Manche clôturée J{idx + 1}
+                                        </p>
+                                        <p className="truncate text-xs font-bold">{itemData.name}</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center justify-between px-1.5 pt-2 text-[11px] font-bold text-[#173f35]">
+                                      <span className="text-[#76837c]">Prix réel</span>
+                                      <span className="font-extrabold text-[#173f35]">{itemData.price}</span>
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={`hist-${day.short}-${idx}`} className="flex items-center gap-3 rounded-2xl border border-[#173f35]/5 bg-[#fbf8f1]/60 p-4 opacity-60">
+                            <div className="grid h-12 w-12 place-items-center rounded-xl bg-[#173f35]/5 font-display text-lg font-semibold text-[#76837c]">
+                              J{idx + 1}
+                            </div>
+                            <div>
+                              <p className="text-sm font-extrabold text-[#76837c]">{day.name}</p>
+                              <p className="text-xs text-[#9aa59f]">À venir · Débloqué à 08 h</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
                 </div>
-              </div>
-            </section>
-          </div>
+              </>
+            );
+          })()}
         </>
       )}
 
@@ -347,7 +581,7 @@ export default function GroupView({
                     value={groupName}
                     onChange={(e) => setGroupName(e.target.value)}
                     required
-                    placeholder="Ex: Les Experts du Vintage"
+                    placeholder="Ex: Les As du Flair"
                     className="mt-1.5 w-full rounded-2xl border border-[#173f35]/15 bg-[#fbf8f1] px-4 py-3 text-sm font-semibold text-[#173f35] outline-none focus:border-[#e9683a] focus:ring-4 focus:ring-[#e9683a]/10"
                   />
                 </div>
@@ -357,12 +591,12 @@ export default function GroupView({
                     <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
                       Inviter des amis ({selectedFriends.length}/3)
                     </label>
-                    <span className="text-[11px] text-[#76837c]">Places libres complétées par IA</span>
+                    <span className="text-[11px] text-[#76837c]">Code secret unique à partager</span>
                   </div>
 
                   {friends.length === 0 ? (
-                    <p className="mt-2 rounded-2xl bg-[#f5f0e5] p-4 text-xs text-[#76837c]">
-                      Tu n'as pas encore d'amis ajoutés. Tu pourras partager le code de l'escouade après création ou jouer avec des rivaux IA.
+                    <p className="mt-2 rounded-2xl bg-[#f5f0e5] p-4 text-xs text-[#76837c] leading-relaxed">
+                      Aucun ami dans ta liste pour l'instant. L'escouade sera créée avec toi comme seul membre (1/4) et tu obtiendras un code secret unique à leur partager pour qu'ils te rejoignent.
                     </p>
                   ) : (
                     <div className="mt-2 space-y-2 max-h-48 overflow-y-auto pr-1">
@@ -402,7 +636,7 @@ export default function GroupView({
                 </div>
 
                 <div className="rounded-2xl bg-[#f5f0e5] p-4 text-xs leading-relaxed text-[#506158]">
-                  💡 <strong>Règle du jeu :</strong> Chaque jour, les 4 membres reçoivent le même objet mystère à estimer. Le samedi soir, le dernier est éliminé !
+                  <strong>Règle du jeu :</strong> Chaque jour, les membres de l'escouade reçoivent le même objet mystère à estimer. Le samedi soir, le dernier au classement est éliminé !
                 </div>
 
                 <div className="flex gap-3 pt-2">

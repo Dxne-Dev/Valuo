@@ -23,6 +23,7 @@ import {
   resetPasswordForEmail,
   signInWithPassword,
 } from "../lib/api";
+import { sanitizeInput } from "../lib/security";
 import Logo from "./Logo";
 
 type AuthScreenProps = {
@@ -62,13 +63,15 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
   // 1. REGISTER FLOW
   async function handleRegister(event: FormEvent) {
     event.preventDefault();
-    if (!email.trim()) return;
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = sanitizeInput(name.trim());
+    if (!cleanEmail) return;
 
     setErrorMsg("");
     setLoading(true);
 
     try {
-      const res = await registerWithTemporaryPassword(email.trim(), name.trim());
+      const res = await registerWithTemporaryPassword(cleanEmail, cleanName);
 
       if (res.error) {
         setErrorMsg(res.error.message || "Erreur lors de l'inscription.");
@@ -85,25 +88,27 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
   // 2. LOGIN FLOW
   async function handleLogin(event: FormEvent) {
     event.preventDefault();
-    if (!email.trim() || !password.trim()) return;
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+    if (!cleanEmail || !cleanPassword) return;
 
     setErrorMsg("");
     setLoading(true);
 
     try {
       if (!isSupabaseConfigured) {
-        onAuth(email.trim(), undefined, true, false);
+        onAuth(cleanEmail, undefined, true, false);
         return;
       }
 
-      const res = await signInWithPassword(email.trim(), password.trim());
+      const res = await signInWithPassword(cleanEmail, cleanPassword);
       if (res.error) {
         setErrorMsg(res.error.message || "Email ou mot de passe incorrect.");
       } else if (res.data?.user) {
         const isTemp = Boolean(res.data.user.user_metadata?.needs_password_change);
-        onAuth(email.trim(), res.data.user.id, isTemp, false);
+        onAuth(cleanEmail, res.data.user.id, isTemp, false);
       } else {
-        onAuth(email.trim(), undefined, false, false);
+        onAuth(cleanEmail, undefined, false, false);
       }
     } catch (err: any) {
       setErrorMsg(err?.message || "Erreur de connexion.");
@@ -114,14 +119,15 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
 
   // 3. FORGOT PASSWORD
   async function handleForgotPassword() {
-    if (!email.trim()) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
       setErrorMsg("Veuillez saisir votre email ci-dessus d'abord.");
       return;
     }
     setLoading(true);
     try {
-      await resetPasswordForEmail(email.trim());
-      setSuccessMsg(`Un lien de réinitialisation a été envoyé à ${email}.`);
+      await resetPasswordForEmail(cleanEmail);
+      setSuccessMsg(`Un lien de réinitialisation a été envoyé à ${cleanEmail}.`);
     } catch (err: any) {
       setErrorMsg(err?.message || "Erreur lors de l'envoi du lien.");
     } finally {

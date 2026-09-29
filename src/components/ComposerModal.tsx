@@ -118,7 +118,7 @@ export default function ComposerModal({ open, onClose, onPublish }: ComposerModa
                       <Camera size={25} />
                     </div>
                     <p className="mt-4 font-display text-xl font-semibold text-[#173f35]">
-                      Montre-nous ta trouvaille
+                      Partage ta photo du jour
                     </p>
                     <p className="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-[#7d8982]">
                       Prends une photo maintenant ou choisis-en une dans ta galerie.
@@ -150,13 +150,13 @@ export default function ComposerModal({ open, onClose, onPublish }: ComposerModa
                 htmlFor="caption"
                 className="mt-5 block text-xs font-extrabold uppercase tracking-wider text-[#53655b]"
               >
-                Raconte son histoire
+                Légende de ta photo
               </label>
               <textarea
                 id="caption"
                 value={caption}
                 onChange={(event) => setCaption(event.target.value)}
-                placeholder="Où l'as-tu trouvé ? Pourquoi cet objet compte pour toi ?"
+                placeholder="Décris ta photo, le lieu ou ce qui a attiré ton regard…"
                 rows={3}
                 className="mt-2 w-full resize-none rounded-2xl border-2 border-[#173f35]/10 bg-white px-4 py-3 text-sm leading-relaxed text-[#173f35] outline-none transition placeholder:text-[#173f35]/25 focus:border-[#e9683a]"
               />
@@ -169,7 +169,7 @@ export default function ComposerModal({ open, onClose, onPublish }: ComposerModa
                   <Loader2 size={18} className="animate-spin" />
                 ) : (
                   <>
-                    <Sparkles size={17} /> Publier ma trouvaille
+                    <Sparkles size={17} /> Publier ma photo
                   </>
                 )}
               </button>

@@ -173,7 +173,7 @@ export default function ProfileView({
 
           <div className="mb-4 flex items-end justify-between">
             <div>
-              <h2 className="font-display text-2xl font-semibold text-[#173f35]">Mes trouvailles & captures</h2>
+              <h2 className="font-display text-2xl font-semibold text-[#173f35]">Mes publications & défis</h2>
               <p className="mt-1 text-sm text-[#8a958f]">
                 {gallery.length} contribution{gallery.length > 1 ? "s" : ""} aux défis photo
               </p>
@@ -185,7 +185,7 @@ export default function ProfileView({
             <div className="rounded-[22px] border border-dashed border-[#173f35]/15 bg-[#fbf8f1] p-8 text-center">
               <Camera size={28} className="mx-auto text-[#76837c]" />
               <p className="mt-3 font-display text-base font-semibold text-[#173f35]">Aucune publication pour l'instant</p>
-              <p className="mt-1 text-xs text-[#76837c]">Participe au défi photo du jour pour afficher tes premières trouvailles ici !</p>
+              <p className="mt-1 text-xs text-[#76837c]">Participe au défi photo du jour pour afficher tes premières publications ici !</p>
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
@@ -210,7 +210,7 @@ export default function ProfileView({
           ) : (
             <section className="rounded-[24px] bg-[#edf7f2] p-5 text-[#173f35] border border-[#488262]/20">
               <Trophy size={22} className="text-[#488262]" />
-              <h2 className="mt-4 font-display text-xl font-semibold">Nouveau Chasseur</h2>
+              <h2 className="mt-4 font-display text-xl font-semibold">Nouveau Joueur</h2>
               <p className="mt-2 text-xs leading-relaxed text-[#506158]">
                 Participe à ton premier défi photo ou soumets une première estimation de Mystery Box pour débloquer tes premiers badges de réputation !
               </p>

@@ -11,15 +11,20 @@ import {
   todayChallenge,
   type UserProfile,
 } from "../data";
+import {
+  checkRateLimit,
+  generateSecureTemporaryPassword,
+  resetRateLimit,
+  sanitizeInput,
+} from "./security";
 
 // ============================================================================
 // 1. AUTHENTICATION & PROFILE
 // ============================================================================
 
-// Generate a random temporary password (e.g. "Valuo-4927")
+// Generate a cryptographically strong temporary password
 export function generateTemporaryPassword() {
-  const num = Math.floor(1000 + Math.random() * 9000);
-  return `Valuo-${num}!`;
+  return generateSecureTemporaryPassword();
 }
 
 export async function getCurrentSession() {
@@ -31,14 +36,27 @@ export async function getCurrentSession() {
 import { sendValuoWelcomeEmail } from "./emailService";
 
 export async function registerWithTemporaryPassword(email: string, name?: string) {
-  const tempPassword = generateTemporaryPassword();
-  const userName = name?.trim() || splitEmail(email);
+  const cleanEmail = email.trim().toLowerCase();
+  
+  // Rate limiting check
+  const rateLimit = checkRateLimit(`register_${cleanEmail}`, 3, 60000);
+  if (!rateLimit.allowed) {
+    return {
+      data: null,
+      error: { message: `Trop de tentatives. Réessayez dans ${rateLimit.retryAfterSeconds}s.` },
+      tempPassword: "",
+      isMock: false,
+    };
+  }
+
+  const tempPassword = generateSecureTemporaryPassword();
+  const userName = sanitizeInput(name?.trim() || splitEmail(cleanEmail));
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const activationUrl = `${origin}?mode=login&email=${encodeURIComponent(email.trim())}`;
+  const activationUrl = `${origin}?mode=login&email=${encodeURIComponent(cleanEmail)}`;
 
   // Send custom VALUO welcome email
   await sendValuoWelcomeEmail({
-    email: email.trim(),
+    email: cleanEmail,
     name: userName,
     tempPassword,
     activationUrl,
@@ -49,7 +67,7 @@ export async function registerWithTemporaryPassword(email: string, name?: string
   }
 
   const { data, error } = await supabase.auth.signUp({
-    email: email.trim(),
+    email: cleanEmail,
     password: tempPassword,
     options: {
       data: {
@@ -64,16 +82,31 @@ export async function registerWithTemporaryPassword(email: string, name?: string
   return { data, error, tempPassword, isMock: false };
 }
 
-
 export async function signInWithPassword(email: string, password: string) {
+  const cleanEmail = email.trim().toLowerCase();
+
+  // Rate limiting check
+  const rateLimit = checkRateLimit(`login_${cleanEmail}`, 5, 60000);
+  if (!rateLimit.allowed) {
+    return {
+      data: null,
+      error: { message: `Trop de tentatives de connexion. Réessayez dans ${rateLimit.retryAfterSeconds}s.` },
+      isMock: false,
+    };
+  }
+
   if (!isSupabaseConfigured) {
     return { data: null, error: null, isMock: true };
   }
 
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.trim(),
+    email: cleanEmail,
     password: password.trim(),
   });
+
+  if (!error) {
+    resetRateLimit(`login_${cleanEmail}`);
+  }
 
   return { data, error, isMock: false };
 }
@@ -180,7 +213,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
     );
 
     // Prioritize explicit onboarding choices from localProfile or auth metadata over default trigger values
-    const effectiveName = (localProfile?.name && localProfile.name !== "Chasseur VALUO" ? localProfile.name : (meta?.name || data?.name)) || "Joueur VALUO";
+    const effectiveName = (localProfile?.name && localProfile.name !== "Chasseur VALUO" && localProfile.name !== "Joueur VALUO" ? localProfile.name : (meta?.name || data?.name)) || "Joueur VALUO";
     const effectiveCity = (localProfile?.city && localProfile.city !== "France" ? localProfile.city : (meta?.city || data?.city)) || "France";
     const effectiveAvatar = (localProfile?.avatar ? localProfile.avatar : (meta?.avatar_url || data?.avatar_url)) || avatars.lea;
 
@@ -224,9 +257,9 @@ export async function saveUserProfile(userId: string, profile: Partial<UserProfi
     updated_at: new Date().toISOString(),
   };
 
-  if (mergedProfile.name !== undefined) updateFields.name = mergedProfile.name;
-  if (mergedProfile.city !== undefined) updateFields.city = mergedProfile.city;
-  if (mergedProfile.bio !== undefined) updateFields.bio = mergedProfile.bio;
+  if (mergedProfile.name !== undefined) updateFields.name = sanitizeInput(mergedProfile.name);
+  if (mergedProfile.city !== undefined) updateFields.city = sanitizeInput(mergedProfile.city);
+  if (mergedProfile.bio !== undefined) updateFields.bio = sanitizeInput(mergedProfile.bio);
   if (mergedProfile.avatar !== undefined) updateFields.avatar_url = mergedProfile.avatar;
   if (mergedProfile.cover !== undefined) updateFields.cover_url = mergedProfile.cover;
   if (mergedProfile.isAdmin !== undefined) updateFields.is_admin = mergedProfile.isAdmin;
@@ -414,74 +447,171 @@ export async function saveMysteryItem(item: Partial<MysteryItemData>) {
   }
 }
 
-export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]> {
-  if (!isSupabaseConfigured) return [pinnedGameMasterPost];
+// ============================================================================
+// RECRUITMENT POST HELPERS & LOCAL CACHE
+// ============================================================================
 
-  const { data, error } = await supabase
-    .from("feed_posts")
-    .select(`
-      id,
-      photo_url,
-      caption,
-      city,
-      is_pinned,
-      is_official,
-      likes_count,
-      created_at,
-      profiles (
+export function createRecruitmentFeedPostObj(
+  squadCode: string,
+  squadName: string,
+  customId?: number | string,
+): FeedPost {
+  return {
+    id: customId || `recruit-${squadCode}`,
+    author: "VALUO Matchmaking",
+    city: "Arène VALUO",
+    avatar: "https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=300&w=300",
+    photo: "",
+    caption: `Recherche 3 coéquipiers pour relever les défis de la semaine dans « ${squadName} » ! Rejoins-nous en 1 clic.`,
+    time: "À l'instant",
+    likes: 0,
+    comments: [],
+    isPinned: false,
+    isOfficial: false,
+    isRecruitment: true,
+    squadCode,
+    squadName,
+  };
+}
+
+export function saveActiveRecruitmentLocalCache(squadCode: string, squadName: string) {
+  if (typeof window === "undefined" || !squadCode) return;
+  try {
+    const listRaw = localStorage.getItem("valuo_active_recruitment_codes");
+    const list: Record<string, string> = listRaw ? JSON.parse(listRaw) : {};
+    list[squadCode] = squadName;
+    localStorage.setItem("valuo_active_recruitment_codes", JSON.stringify(list));
+  } catch {}
+}
+
+export function removeActiveRecruitmentLocalCache(squadCode: string) {
+  if (typeof window === "undefined" || !squadCode) return;
+  try {
+    const listRaw = localStorage.getItem("valuo_active_recruitment_codes");
+    if (!listRaw) return;
+    const list: Record<string, string> = JSON.parse(listRaw);
+    delete list[squadCode];
+    localStorage.setItem("valuo_active_recruitment_codes", JSON.stringify(list));
+  } catch {}
+}
+
+export function getActiveRecruitmentLocalCache(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const listRaw = localStorage.getItem("valuo_active_recruitment_codes");
+    return listRaw ? JSON.parse(listRaw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]> {
+  let posts: FeedPost[] = [];
+
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase
+      .from("feed_posts")
+      .select(`
         id,
-        name,
-        avatar_url
-      ),
-      post_likes (
-        user_id
-      ),
-      post_comments (
-        id,
-        text,
+        photo_url,
+        caption,
+        city,
+        is_pinned,
+        is_official,
+        likes_count,
         created_at,
         profiles (
+          id,
           name,
           avatar_url
+        ),
+        post_likes (
+          user_id
+        ),
+        post_comments (
+          id,
+          text,
+          created_at,
+          profiles (
+            name,
+            avatar_url
+          )
         )
-      )
-    `)
-    .order("is_pinned", { ascending: false })
-    .order("created_at", { ascending: false });
+      `)
+      .order("is_pinned", { ascending: false })
+      .order("created_at", { ascending: false });
 
-  if (error || !data || data.length === 0) return [pinnedGameMasterPost];
+    if (!error && data && data.length > 0) {
+      posts = data.map((item: any) => {
+        const userLiked = currentUserId
+          ? item.post_likes?.some((like: any) => like.user_id === currentUserId)
+          : false;
 
-  return data.map((item: any) => {
-    const userLiked = currentUserId
-      ? item.post_likes?.some((like: any) => like.user_id === currentUserId)
-      : false;
+        const formattedComments = (item.post_comments || []).map((c: any) => ({
+          id: c.id,
+          author: c.profiles?.name || "Membre",
+          avatar: c.profiles?.avatar_url || avatars.lea,
+          text: c.text,
+        }));
 
-    const formattedComments = (item.post_comments || []).map((c: any) => ({
-      id: c.id,
-      author: c.profiles?.name || "Membre",
-      avatar: c.profiles?.avatar_url || avatars.lea,
-      text: c.text,
-    }));
+        // Format relative time
+        const diffMin = Math.max(1, Math.round((Date.now() - new Date(item.created_at).getTime()) / 60000));
+        const timeStr = diffMin < 60 ? `Il y a ${diffMin} min` : `Il y a ${Math.round(diffMin / 60)} h`;
 
-    // Format relative time
-    const diffMin = Math.max(1, Math.round((Date.now() - new Date(item.created_at).getTime()) / 60000));
-    const timeStr = diffMin < 60 ? `Il y a ${diffMin} min` : `Il y a ${Math.round(diffMin / 60)} h`;
+        const recruitmentMatch = item.caption ? item.caption.match(/^\[RECRUITMENT\|([^|]+)\|([^\]]+)\]\s*(.*)$/s) : null;
+        const cleanCaption = recruitmentMatch ? recruitmentMatch[3] : item.caption;
+        const isRecruit = !!recruitmentMatch;
 
-    return {
-      id: item.id,
-      author: item.profiles?.name || "Anonyme",
-      city: item.city || "France",
-      avatar: item.profiles?.avatar_url || avatars.lea,
-      photo: item.photo_url,
-      caption: item.caption,
-      time: item.is_pinned ? "Épinglé · 08:00" : timeStr,
-      likes: item.likes_count || 0,
-      liked: userLiked,
-      isPinned: item.is_pinned,
-      isOfficial: item.is_official,
-      comments: formattedComments,
-    };
-  });
+        return {
+          id: item.id,
+          author: isRecruit ? "VALUO Matchmaking" : (item.profiles?.name || "Joueur VALUO"),
+          city: isRecruit ? "Arène VALUO" : (item.city || "France"),
+          avatar: isRecruit
+            ? "https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=300&w=300"
+            : (item.profiles?.avatar_url || avatars.lea),
+          photo: isRecruit ? "" : item.photo_url,
+          caption: cleanCaption,
+          time: item.is_pinned ? "Épinglé · 08:00" : timeStr,
+          likes: item.likes_count || 0,
+          liked: userLiked,
+          isPinned: isRecruit ? false : item.is_pinned,
+          isOfficial: isRecruit ? false : item.is_official,
+          isRecruitment: isRecruit,
+          squadCode: recruitmentMatch ? recruitmentMatch[1] : undefined,
+          squadName: recruitmentMatch ? recruitmentMatch[2] : undefined,
+          comments: formattedComments,
+        };
+      });
+    }
+  }
+
+  // Ensure pinnedGameMasterPost is present if not in fetched posts
+  const hasPinned = posts.some((p) => p.isPinned);
+  if (!hasPinned) {
+    posts = [pinnedGameMasterPost, ...posts];
+  }
+
+  // Rehydrate local recruitment cache (for demo or offline / fast display)
+  const cachedRecruitments = getActiveRecruitmentLocalCache();
+  const recruitmentSquadCodes = Object.keys(cachedRecruitments);
+
+  if (recruitmentSquadCodes.length > 0) {
+    for (const code of recruitmentSquadCodes) {
+      const alreadyInList = posts.some((p) => p.squadCode === code);
+      if (!alreadyInList) {
+        const squadName = cachedRecruitments[code];
+        const recruitPost = createRecruitmentFeedPostObj(code, squadName);
+        const pinned = posts.filter((p) => p.isPinned);
+        const unpinned = posts.filter((p) => !p.isPinned);
+        posts = [...pinned, recruitPost, ...unpinned];
+      }
+    }
+  }
+
+  // Always strictly guarantee pinned post is index 0
+  const finalPinned = posts.filter((p) => p.isPinned);
+  const finalUnpinned = posts.filter((p) => !p.isPinned);
+  return [...finalPinned, ...finalUnpinned];
 }
 
 export async function createFeedPost(
@@ -490,16 +620,21 @@ export async function createFeedPost(
   caption: string,
   city?: string,
   challengeId?: string,
+  squadRecruitment?: { code: string; name: string },
 ) {
   if (!isSupabaseConfigured) return null;
+
+  const rawCaption = squadRecruitment
+    ? `[RECRUITMENT|${squadRecruitment.code}|${squadRecruitment.name}] ${caption}`
+    : caption;
 
   const { data, error } = await supabase
     .from("feed_posts")
     .insert({
       user_id: userId,
       photo_url: photoUrl,
-      caption,
-      city: city || "France",
+      caption: sanitizeInput(rawCaption),
+      city: sanitizeInput(city || "France"),
       challenge_id: challengeId || null,
       is_pinned: false,
       is_official: false,
@@ -532,7 +667,7 @@ export async function addPostComment(userId: string, postId: string | number, te
     .insert({
       user_id: userId,
       post_id: postId,
-      text,
+      text: sanitizeInput(text),
     })
     .select()
     .single();
@@ -626,19 +761,132 @@ export async function fetchUserSquad(userId: string): Promise<GroupData | null> 
   };
 }
 
+export async function deleteRecruitmentPostBySquadCode(squadCode: string): Promise<boolean> {
+  removeActiveRecruitmentLocalCache(squadCode);
+  if (!isSupabaseConfigured || !squadCode) return false;
+  try {
+    const pattern = `[RECRUITMENT|${squadCode}|%`;
+    await supabase.from("feed_posts").delete().like("caption", pattern);
+    return true;
+  } catch (err) {
+    console.warn("deleteRecruitmentPost error:", err);
+    return false;
+  }
+}
+
+export async function republishSquadRecruitment(
+  userId: string,
+  squadCode: string,
+  squadName: string,
+  city?: string,
+) {
+  saveActiveRecruitmentLocalCache(squadCode, squadName);
+  if (!isSupabaseConfigured) return null;
+
+  // 1. Clean previous post for this squad code
+  await deleteRecruitmentPostBySquadCode(squadCode);
+  saveActiveRecruitmentLocalCache(squadCode, squadName);
+
+  // 2. Create fresh post (banner only, no dummy photo)
+  return await createFeedPost(
+    userId,
+    "",
+    "Recherche 3 coéquipiers pour relever les défis de la semaine dans mon escouade ! Rejoins-nous en 1 clic.",
+    city || "France",
+    undefined,
+    { code: squadCode, name: squadName },
+  );
+}
+
+export async function leaveSquadInDb(
+  userId: string,
+  squadId?: string,
+  squadCode?: string,
+): Promise<{ remainingCount: number }> {
+  if (!isSupabaseConfigured) return { remainingCount: 0 };
+
+  try {
+    let targetSquadId = squadId;
+    let targetSquadCode = squadCode;
+
+    if (!targetSquadId || !targetSquadCode) {
+      const { data: mem } = await supabase
+        .from("squad_members")
+        .select("squad_id, squads:squad_id(id, code)")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (mem?.squads) {
+        targetSquadId = (mem.squads as any).id;
+        targetSquadCode = (mem.squads as any).code;
+      }
+    }
+
+    // 1. Remove user from squad_members
+    await supabase
+      .from("squad_members")
+      .delete()
+      .eq("user_id", userId);
+
+    // 2. Check remaining real members in that squad
+    if (targetSquadId) {
+      const { data: remainingMembers } = await supabase
+        .from("squad_members")
+        .select("id, user_id, is_npc")
+        .eq("squad_id", targetSquadId)
+        .eq("is_npc", false);
+
+      const remainingCount = remainingMembers?.length || 0;
+
+      if (remainingCount === 0) {
+        // Delete orphaned squad
+        await supabase
+          .from("squads")
+          .delete()
+          .eq("id", targetSquadId);
+
+        // Delete associated recruitment post from feed
+        if (targetSquadCode) {
+          await deleteRecruitmentPostBySquadCode(targetSquadCode);
+        }
+      } else {
+        // If creator left, promote first remaining member to created_by
+        const nextLeaderId = remainingMembers?.[0]?.user_id;
+        if (nextLeaderId) {
+          await supabase
+            .from("squads")
+            .update({ created_by: nextLeaderId })
+            .eq("id", targetSquadId);
+        }
+      }
+
+      return { remainingCount };
+    }
+
+    return { remainingCount: 0 };
+  } catch (err) {
+    console.warn("leaveSquadInDb error:", err);
+    return { remainingCount: 0 };
+  }
+}
+
 export async function createSquadInDb(
   userId: string,
   squadName: string,
-  _invitedFriends: string[] = [],
+  invitedFriends: string[] = [],
+  fillWithNpc = false,
 ): Promise<GroupData | null> {
   if (!isSupabaseConfigured) return null;
+
+  // Clean up any existing squad membership first to avoid 409 conflicts
+  await leaveSquadInDb(userId);
 
   const code = `VALUO-${Math.floor(100 + Math.random() * 900)}`;
 
   const { data: squad, error } = await supabase
     .from("squads")
     .insert({
-      name: squadName,
+      name: sanitizeInput(squadName),
       code,
       created_by: userId,
       week_number: 38,
@@ -652,32 +900,74 @@ export async function createSquadInDb(
     return null;
   }
 
-  // Insert current user member
-  await supabase.from("squad_members").insert({
-    squad_id: squad.id,
-    user_id: userId,
-    points: 0,
-    rank_change: 0,
-    is_npc: false,
-  });
-
-  // Insert NPC rivals to fill squad to 4
-  const npcs = [
-    { name: "Léon (IA)", avatar: avatars.samir },
-    { name: "Camille (IA)", avatar: avatars.camille },
-    { name: "Jeanne (IA)", avatar: avatars.ines },
-  ];
-
-  for (let i = 0; i < 3; i++) {
-    await supabase.from("squad_members").insert({
+  const membersToInsert: Array<{
+    squad_id: string;
+    user_id?: string | null;
+    npc_name?: string;
+    npc_avatar?: string;
+    points: number;
+    rank_change: number;
+    is_npc: boolean;
+    current_estimate?: number;
+  }> = [
+    {
       squad_id: squad.id,
-      npc_name: npcs[i].name,
-      npc_avatar: npcs[i].avatar,
-      is_npc: true,
+      user_id: userId,
       points: 0,
       rank_change: 0,
-      current_estimate: 55 + i * 8,
-    });
+      is_npc: false,
+    },
+  ];
+
+  // If friends are selected, add them
+  if (invitedFriends && invitedFriends.length > 0) {
+    try {
+      const { data: friendProfiles } = await supabase
+        .from("profiles")
+        .select("id, name")
+        .in("name", invitedFriends);
+
+      if (friendProfiles && friendProfiles.length > 0) {
+        for (const fp of friendProfiles) {
+          membersToInsert.push({
+            squad_id: squad.id,
+            user_id: fp.id,
+            points: 0,
+            rank_change: 0,
+            is_npc: false,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Could not attach invited friends:", e);
+    }
+  }
+
+  // Only fill with NPC rivals if explicitly requested (e.g. matchmaking mode)
+  if (fillWithNpc) {
+    const npcs = [
+      { name: "Léon (IA)", avatar: avatars.samir, est: 55 },
+      { name: "Camille (IA)", avatar: avatars.camille, est: 63 },
+      { name: "Jeanne (IA)", avatar: avatars.ines, est: 71 },
+    ];
+
+    const slotsNeeded = Math.max(0, 4 - membersToInsert.length);
+    for (let i = 0; i < slotsNeeded; i++) {
+      membersToInsert.push({
+        squad_id: squad.id,
+        npc_name: npcs[i]?.name || `Rival ${i + 1} (IA)`,
+        npc_avatar: npcs[i]?.avatar || avatars.samir,
+        is_npc: true,
+        points: 0,
+        rank_change: 0,
+        current_estimate: npcs[i]?.est || 55 + i * 8,
+      });
+    }
+  }
+
+  const { error: membersError } = await supabase.from("squad_members").insert(membersToInsert);
+  if (membersError) {
+    console.error("Error inserting squad members:", membersError);
   }
 
   return await fetchUserSquad(userId);
@@ -693,6 +983,9 @@ export async function joinSquadByCode(userId: string, code: string): Promise<Gro
     .maybeSingle();
 
   if (!squad) return null;
+
+  // Clean up any previous squad membership before joining new one
+  await leaveSquadInDb(userId);
 
   await supabase.from("squad_members").upsert({
     squad_id: squad.id,

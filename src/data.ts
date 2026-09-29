@@ -1,12 +1,12 @@
 export type Comment = {
-  id: number;
+  id: number | string;
   author: string;
   avatar: string;
   text: string;
 };
 
 export type FeedPost = {
-  id: number;
+  id: number | string;
   author: string;
   city: string;
   avatar: string;
@@ -18,6 +18,9 @@ export type FeedPost = {
   comments: Comment[];
   isPinned?: boolean;
   isOfficial?: boolean;
+  isRecruitment?: boolean;
+  squadCode?: string;
+  squadName?: string;
 };
 
 export type UserProfile = {
@@ -122,7 +125,7 @@ export const pinnedGameMasterPost: FeedPost = {
   city: "Défi Officiel",
   avatar: "https://images.pexels.com/photos/3861969/pexels-photo-3861969.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=300&w=300",
   photo: media.redPhone,
-  caption: "Défi du jour : « Une touche de rouge ». Repérez un objet, un détail ou une trouvaille qui porte cette couleur et a une histoire. Les 3 photos les plus likées rapportent un bonus de points à votre escouade !",
+  caption: "Défi du jour : « Une touche de rouge ». Repérez un objet ou un détail captivant qui porte cette couleur. Les 3 photos les plus likées rapportent un bonus de points à votre escouade !",
   time: "Épinglé · 08:00",
   likes: 0,
   liked: false,

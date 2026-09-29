@@ -13,6 +13,7 @@ import {
   Share2,
   Sparkles,
   UserPlus,
+  Users,
 } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { type FeedPost, todayChallenge, type UserProfile } from "../data";
@@ -30,6 +31,7 @@ type FeedViewProps = {
   onOpenComposer: () => void;
   onShare: (post: FeedPost) => void;
   onAddComment: (postId: number | string, text: string) => void;
+  onJoinSquad?: (code: string) => void;
 };
 
 const filters: { id: FeedFilter; label: string }[] = [
@@ -48,6 +50,7 @@ export default function FeedView({
   onOpenComposer,
   onShare,
   onAddComment,
+  onJoinSquad,
 }: FeedViewProps) {
   const currentChallenge = challenge || todayChallenge;
   const [filter, setFilter] = useState<FeedFilter>("recents");
@@ -165,7 +168,7 @@ export default function FeedView({
               Aucun ami pour le moment
             </h3>
             <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-[#6f7e76]">
-              Ajoute des créateurs en cliquant sur le bouton <span className="font-bold text-[#173f35]">+ Ami</span> sur leurs publications dans l'onglet Récents pour suivre leurs trouvailles !
+              Ajoute des créateurs en cliquant sur le bouton <span className="font-bold text-[#173f35]">+ Ami</span> sur leurs publications dans l'onglet Récents pour suivre leurs photos et leurs défis !
             </p>
             <button
               type="button"
@@ -272,6 +275,32 @@ export default function FeedView({
                   <img src={post.photo} alt={post.caption} className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.03]" />
                 </div>
 
+                {/* Bannière de recrutement d'escouade */}
+                {post.isRecruitment && post.squadCode && (
+                  <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-2xl bg-[#173f35] p-3.5 text-white shadow-md">
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f3c969] text-[#173f35]">
+                        <Users size={18} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-extrabold text-white">
+                          {post.squadName || "Escouade de duel"}
+                        </p>
+                        <p className="text-[11px] font-semibold text-[#f3c969]">
+                          Recherche des coéquipiers (4 max)
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onJoinSquad?.(post.squadCode!)}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#e9683a] px-3.5 py-2 text-xs font-extrabold text-white shadow-md transition hover:bg-[#d9582d]"
+                    >
+                      <UserPlus size={13} /> Rejoindre
+                    </button>
+                  </div>
+                )}
+
                 <div className="px-4 py-4">
                   <div className="flex items-center gap-1">
                     <button
@@ -373,7 +402,7 @@ export default function FeedView({
             </div>
             <h3 className="mt-4 font-display text-xl font-semibold text-[#173f35]">Aucune photo pour le moment</h3>
             <p className="mx-auto mt-1.5 max-w-sm text-sm text-[#6f7e76]">
-              Sois le premier de ton escouade à partager ta trouvaille pour le défi du jour !
+              Sois le premier de ton escouade à relever le défi photo du jour !
             </p>
             <button
               type="button"
