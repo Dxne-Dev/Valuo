@@ -308,7 +308,27 @@ export type ChallengeData = {
   remaining: string;
 };
 
+export async function deactivateActiveChallenge() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("valuo_custom_challenge");
+    localStorage.setItem("valuo_challenge_deactivated", "true");
+  }
+  if (!isSupabaseConfigured) return;
+  try {
+    await supabase
+      .from("daily_challenges")
+      .update({ active: false })
+      .eq("active", true);
+  } catch (err) {
+    console.warn("Could not deactivate challenge:", err);
+  }
+}
+
 export async function fetchActiveChallenge(): Promise<ChallengeData | null> {
+  if (typeof window !== "undefined" && localStorage.getItem("valuo_challenge_deactivated") === "true") {
+    return null;
+  }
+
   const cached = typeof window !== "undefined" ? localStorage.getItem("valuo_custom_challenge") : null;
   let localChallenge: ChallengeData | null = null;
   if (cached) {
@@ -351,6 +371,7 @@ export async function fetchActiveChallenge(): Promise<ChallengeData | null> {
 
 export async function saveActiveChallenge(challenge: Partial<ChallengeData>) {
   if (typeof window !== "undefined") {
+    localStorage.removeItem("valuo_challenge_deactivated");
     const existing = localStorage.getItem("valuo_custom_challenge");
     let merged = { ...todayChallenge, ...challenge };
     if (existing) {
@@ -362,6 +383,8 @@ export async function saveActiveChallenge(challenge: Partial<ChallengeData>) {
   if (!isSupabaseConfigured) return;
 
   try {
+    await supabase.from("daily_challenges").update({ active: false }).eq("active", true);
+
     await supabase.from("daily_challenges").insert({
       theme: challenge.theme,
       brief: challenge.brief,

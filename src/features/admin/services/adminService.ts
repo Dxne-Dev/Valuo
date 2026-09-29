@@ -7,6 +7,7 @@ import {
 import {
   type ChallengeData,
   createOfficialPost,
+  deactivateActiveChallenge,
   type MysteryItemData,
   saveActiveChallenge,
   saveMysteryItem,
@@ -16,6 +17,7 @@ export {
   fetchAdminMetrics,
   fetchAdminSquadsList,
   createOfficialPost,
+  deactivateActiveChallenge,
   saveActiveChallenge,
   saveMysteryItem,
 };

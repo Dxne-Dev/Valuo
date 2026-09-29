@@ -21,6 +21,7 @@ import {
   type AdminSquadSummary,
   type ChallengeData,
   createOfficialPost,
+  deactivateActiveChallenge,
   fetchAdminMetrics,
   fetchAdminSquadsList,
   type MysteryItemData,
@@ -33,7 +34,7 @@ export type AdminViewProps = {
   activeChallenge?: ChallengeData | null;
   mysteryItem: MysteryItemData;
   posts: FeedPost[];
-  onChallengeUpdated: (challenge: ChallengeData) => void;
+  onChallengeUpdated: (challenge: ChallengeData | null) => void;
   onMysteryUpdated: (item: MysteryItemData) => void;
   onPostCreated: () => void;
   onPostDeleted: (postId: string | number) => void;
@@ -139,7 +140,13 @@ export default function AdminView({
 
     await saveActiveChallenge(updated);
     onChallengeUpdated(updated);
-    onNotice("Défi du jour mis à jour avec succès.");
+    onNotice("Défi du jour publié avec succès sur le feed.");
+  }
+
+  async function handleDeactivateChallenge() {
+    await deactivateActiveChallenge();
+    onChallengeUpdated(null);
+    onNotice("Défi du jour retiré du feed.");
   }
 
   async function handlePublishOfficialPost(event: FormEvent) {
@@ -372,12 +379,23 @@ export default function AdminView({
               />
             </div>
 
-            <button
-              type="submit"
-              className="mt-4 flex items-center gap-2 rounded-full bg-[#173f35] px-6 py-3.5 text-xs font-extrabold text-white transition hover:bg-[#23584b] shadow-lg shadow-[#173f35]/20"
-            >
-              <Save size={16} /> Enregistrer et publier le défi
-            </button>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                className="flex items-center gap-2 rounded-full bg-[#173f35] px-6 py-3.5 text-xs font-extrabold text-white transition hover:bg-[#23584b] shadow-lg shadow-[#173f35]/20"
+              >
+                <Save size={16} /> Enregistrer et publier le défi
+              </button>
+              {activeChallenge && (
+                <button
+                  type="button"
+                  onClick={handleDeactivateChallenge}
+                  className="flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-5 py-3.5 text-xs font-extrabold text-red-600 transition hover:bg-red-100"
+                >
+                  <Trash2 size={15} /> Retirer le défi du feed
+                </button>
+              )}
+            </div>
           </form>
         </motion.div>
       )}
