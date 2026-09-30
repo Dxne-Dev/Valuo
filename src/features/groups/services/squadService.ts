@@ -70,8 +70,8 @@ export async function deleteRecruitmentPostBySquadCode(squadCode: string): Promi
   removeActiveRecruitmentLocalCache(squadCode);
   if (!isSupabaseConfigured || !squadCode) return false;
   try {
-    const pattern = `[RECRUITMENT|${squadCode}|%`;
-    await supabase.from("feed_posts").delete().like("caption", pattern);
+    const pattern = `%${squadCode}%`;
+    await supabase.from("feed_posts").delete().ilike("caption", pattern);
     return true;
   } catch (err) {
     console.warn("deleteRecruitmentPost error:", err);

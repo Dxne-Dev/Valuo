@@ -771,19 +771,39 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
     }
   }
 
-  // Rehydrate local recruitment cache (for demo or offline / fast display)
-  const cachedRecruitments = getActiveRecruitmentLocalCache();
-  const recruitmentSquadCodes = Object.keys(cachedRecruitments);
+  // Clean up any stale recruitment cache keys in localStorage that no longer exist in live Supabase DB
+  if (isSupabaseConfigured && typeof window !== "undefined") {
+    try {
+      const activeDbCodes = new Set(posts.filter((p) => p.isRecruitment && p.squadCode).map((p) => p.squadCode!));
+      const cached = getActiveRecruitmentLocalCache();
+      let changed = false;
+      for (const c of Object.keys(cached)) {
+        if (!activeDbCodes.has(c)) {
+          delete cached[c];
+          changed = true;
+        }
+      }
+      if (changed) {
+        localStorage.setItem("valuo_active_recruitment_codes", JSON.stringify(cached));
+      }
+    } catch {}
+  }
 
-  if (recruitmentSquadCodes.length > 0) {
-    for (const code of recruitmentSquadCodes) {
-      const alreadyInList = posts.some((p) => p.squadCode === code);
-      if (!alreadyInList) {
-        const squadName = cachedRecruitments[code];
-        const recruitPost = createRecruitmentFeedPostObj(code, squadName);
-        const pinned = posts.filter((p) => p.isPinned);
-        const unpinned = posts.filter((p) => !p.isPinned);
-        posts = [...pinned, recruitPost, ...unpinned];
+  // Rehydrate local recruitment cache ONLY when Supabase is NOT configured (demo / offline mode)
+  if (!isSupabaseConfigured) {
+    const cachedRecruitments = getActiveRecruitmentLocalCache();
+    const recruitmentSquadCodes = Object.keys(cachedRecruitments);
+
+    if (recruitmentSquadCodes.length > 0) {
+      for (const code of recruitmentSquadCodes) {
+        const alreadyInList = posts.some((p) => p.squadCode === code);
+        if (!alreadyInList) {
+          const squadName = cachedRecruitments[code];
+          const recruitPost = createRecruitmentFeedPostObj(code, squadName);
+          const pinned = posts.filter((p) => p.isPinned);
+          const unpinned = posts.filter((p) => !p.isPinned);
+          posts = [...pinned, recruitPost, ...unpinned];
+        }
       }
     }
   }
@@ -945,8 +965,8 @@ export async function deleteRecruitmentPostBySquadCode(squadCode: string): Promi
   removeActiveRecruitmentLocalCache(squadCode);
   if (!isSupabaseConfigured || !squadCode) return false;
   try {
-    const pattern = `[RECRUITMENT|${squadCode}|%`;
-    await supabase.from("feed_posts").delete().like("caption", pattern);
+    const pattern = `%${squadCode}%`;
+    await supabase.from("feed_posts").delete().ilike("caption", pattern);
     return true;
   } catch (err) {
     console.warn("deleteRecruitmentPost error:", err);
