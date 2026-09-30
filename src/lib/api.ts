@@ -522,6 +522,9 @@ export async function saveMysteryItem(item: Partial<MysteryItemData>) {
         }).eq("id", existing.id);
       } else {
         // No active item yet — insert one for today
+        // day_number constraint: 1=Mon ... 6=Sat, cap Sunday at 6
+        const dayOfWeek = new Date().getDay(); // 0=Sun, 1=Mon ... 6=Sat
+        const dayNumber = dayOfWeek === 0 ? 6 : Math.min(dayOfWeek, 6);
         await supabase.from("mystery_boxes").insert({
           item_name: item.title,
           photo_url: item.image,
@@ -529,7 +532,7 @@ export async function saveMysteryItem(item: Partial<MysteryItemData>) {
           history_details: item.hint || "",
           real_price: item.realPrice || 0,
           date: new Date().toISOString().split("T")[0],
-          day_number: new Date().getDay() || 7,
+          day_number: dayNumber,
           active: true,
         });
       }
