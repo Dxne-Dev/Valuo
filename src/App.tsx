@@ -131,66 +131,82 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  const userIdRef = useRef<string | null>(userId);
+  userIdRef.current = userId;
+  const initialAuthDoneRef = useRef(false);
+
   // Initial Supabase session check, multi-tab sync & data loading
   useEffect(() => {
     async function initAuth() {
+      if (initialAuthDoneRef.current) return;
+      initialAuthDoneRef.current = true;
+
       if (isSupabaseConfigured) {
         setAuthLoading(true);
-        const session = await getCurrentSession();
-        if (session?.user) {
-          setUserId(session.user.id);
-          setIsDemoUser(false);
-          if (session.user.email) setAuthIdentifier(session.user.email);
-
-          // Clean URL parameters once authenticated (avoid ?mode=login#... staying in address bar)
-          if (typeof window !== "undefined" && (window.location.search || window.location.hash)) {
-            window.history.replaceState({}, document.title, window.location.pathname);
-          }
-
-          await loadUserData(session.user.id, session.user);
-          setSignedIn(true);
-        } else {
-          // If no active Supabase session, check if demo user is active in localStorage
-          const isDemoActive = typeof window !== "undefined" && localStorage.getItem("valuo_demo_user") === "true";
-          if (isDemoActive) {
-            setIsDemoUser(true);
-            setSignedIn(true);
-            setIsOnboarded(true);
-            const cachedSquad = localStorage.getItem("valuo_demo_squad");
-            if (cachedSquad) {
-              try { setGroup(JSON.parse(cachedSquad)); } catch {}
-            }
-          } else {
-            setSignedIn(false);
-            setUserId(null);
+        try {
+          const session = await getCurrentSession();
+          if (session?.user) {
+            setUserId(session.user.id);
             setIsDemoUser(false);
-            setIsOnboarded(false);
-          }
-          setAuthLoading(false);
-        }
+            if (session.user.email) setAuthIdentifier(session.user.email);
 
-        // Supabase Auth State Change Listener
-        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-          if (newSession?.user) {
-            setAuthLoading(true);
-            setUserId(newSession.user.id);
-            setIsDemoUser(false);
-            if (newSession.user.email) setAuthIdentifier(newSession.user.email);
-
-            // Clean URL
+            // Clean URL parameters once authenticated (avoid ?mode=login#... staying in address bar)
             if (typeof window !== "undefined" && (window.location.search || window.location.hash)) {
               window.history.replaceState({}, document.title, window.location.pathname);
             }
 
-            await loadUserData(newSession.user.id, newSession.user);
+            await loadUserData(session.user.id, session.user);
             setSignedIn(true);
-            crossTabChannel?.postMessage({ type: "AUTH_LOGIN", userId: newSession.user.id });
+          } else {
+            // If no active Supabase session, check if demo user is active in localStorage
+            const isDemoActive = typeof window !== "undefined" && localStorage.getItem("valuo_demo_user") === "true";
+            if (isDemoActive) {
+              setIsDemoUser(true);
+              setSignedIn(true);
+              setIsOnboarded(true);
+              const cachedSquad = localStorage.getItem("valuo_demo_squad");
+              if (cachedSquad) {
+                try { setGroup(JSON.parse(cachedSquad)); } catch {}
+              }
+            } else {
+              setSignedIn(false);
+              setUserId(null);
+              setIsDemoUser(false);
+              setIsOnboarded(false);
+            }
+          }
+        } catch (authErr) {
+          console.warn("Init auth error:", authErr);
+        } finally {
+          setAuthLoading(false);
+        }
+
+        // Supabase Auth State Change Listener (Stable & silent token refresh)
+        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+          // Ignore background token refresh events so the UI never flickers
+          if (event === "TOKEN_REFRESHED") {
+            return;
+          }
+
+          if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+            if (newSession?.user && newSession.user.id !== userIdRef.current) {
+              setUserId(newSession.user.id);
+              setIsDemoUser(false);
+              if (newSession.user.email) setAuthIdentifier(newSession.user.email);
+
+              if (typeof window !== "undefined" && (window.location.search || window.location.hash)) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+              }
+
+              await loadUserData(newSession.user.id, newSession.user);
+              setSignedIn(true);
+              crossTabChannel?.postMessage({ type: "AUTH_LOGIN", userId: newSession.user.id });
+            }
           } else if (event === "SIGNED_OUT") {
             setSignedIn(false);
             setUserId(null);
             setIsDemoUser(false);
             setIsOnboarded(false);
-            setAuthLoading(false);
             crossTabChannel?.postMessage({ type: "AUTH_LOGOUT" });
           }
         });
@@ -206,17 +222,15 @@ export default function App() {
     initAuth();
     loadPublicData();
 
-    // Cross-tab broadcast listener
+    // Cross-tab broadcast listener (Only triggers when user ID differs)
     if (crossTabChannel) {
       crossTabChannel.onmessage = (event: MessageEvent) => {
-        if (event.data?.type === "AUTH_LOGIN") {
+        if (event.data?.type === "AUTH_LOGIN" && event.data.userId && event.data.userId !== userIdRef.current) {
           setIsDemoUser(false);
-          if (event.data.userId) {
-            setUserId(event.data.userId);
-            loadUserData(event.data.userId).then(() => {
-              setSignedIn(true);
-            });
-          }
+          setUserId(event.data.userId);
+          loadUserData(event.data.userId).then(() => {
+            setSignedIn(true);
+          });
         } else if (event.data?.type === "AUTH_LOGOUT") {
           setSignedIn(false);
           setUserId(null);
@@ -239,16 +253,13 @@ export default function App() {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  // Supabase Realtime: push updates for all live tables
-  // When the admin or any user changes data, all connected clients see it instantly.
+  // Supabase Realtime: persistent single channel for live tables
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
-    const userIdRef = userId;
-
     const channel = supabase
       .channel("valuo_public_realtime")
-      // Daily challenges: admin activates / deactivates
+      // Daily challenges
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "daily_challenges" },
@@ -257,34 +268,34 @@ export default function App() {
           setActiveChallenge(updated);
         },
       )
-      // Feed posts: admin pins a post, user publishes, etc.
+      // Feed posts
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "feed_posts" },
         async () => {
-          const updated = await fetchFeedPosts(userIdRef || undefined);
+          const updated = await fetchFeedPosts(userIdRef.current || undefined);
           if (updated) setPosts(updated);
         },
       )
-      // Post likes: live like count updates
+      // Post likes
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "post_likes" },
         async () => {
-          const updated = await fetchFeedPosts(userIdRef || undefined);
+          const updated = await fetchFeedPosts(userIdRef.current || undefined);
           if (updated) setPosts(updated);
         },
       )
-      // Post comments: comments appear in real time under posts
+      // Post comments
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "post_comments" },
         async () => {
-          const updated = await fetchFeedPosts(userIdRef || undefined);
+          const updated = await fetchFeedPosts(userIdRef.current || undefined);
           if (updated) setPosts(updated);
         },
       )
-      // Mystery boxes: admin updates today's object (feeds both the feed display and game engine)
+      // Mystery boxes
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "mystery_boxes" },
@@ -293,29 +304,32 @@ export default function App() {
           if (updated) setMysteryItem(updated);
         },
       )
-      // Notifications: user receives a new notification instantly
+      // Notifications
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "notifications",
-          filter: userIdRef ? `user_id=eq.${userIdRef}` : undefined,
         },
-        async () => {
-          if (!userIdRef) return;
-          const updated = await fetchUserNotifications(userIdRef);
-          if (updated) setNotifications(updated);
+        async (payload: any) => {
+          const currentUid = userIdRef.current;
+          if (currentUid && payload?.new?.user_id === currentUid) {
+            const updated = await fetchUserNotifications(currentUid);
+            if (updated) setNotifications(updated);
+          }
         },
       )
-      // Squad members: someone joins or leaves your squad
+      // Squad members
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "squad_members" },
         async () => {
-          if (!userIdRef) return;
-          const updated = await fetchUserSquad(userIdRef);
-          if (updated) setGroup(updated);
+          const currentUid = userIdRef.current;
+          if (currentUid) {
+            const updated = await fetchUserSquad(currentUid);
+            if (updated) setGroup(updated);
+          }
         },
       )
       .subscribe();
@@ -323,7 +337,7 @@ export default function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, isSupabaseConfigured]);
+  }, [isSupabaseConfigured]);
 
   async function loadPublicData() {
     try {
