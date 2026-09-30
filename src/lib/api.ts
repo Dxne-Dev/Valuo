@@ -409,16 +409,33 @@ export async function saveActiveChallenge(challenge: Partial<ChallengeData>) {
   }
 }
 
-export async function createOfficialPost(userId: string, photoUrl: string, caption: string, isPinned = true) {
+export async function createOfficialPost(
+  userId?: string | null,
+  photoUrl?: string,
+  caption?: string,
+  isPinned = true,
+) {
   if (!isSupabaseConfigured) return null;
 
   try {
+    let effectiveUserId = userId;
+    const isUuid = effectiveUserId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveUserId);
+    if (!isUuid) {
+      const { data: { user } } = await supabase.auth.getUser();
+      effectiveUserId = user?.id || null;
+    }
+
+    if (isPinned) {
+      // Unpin any previously pinned posts so only the latest is pinned
+      await supabase.from("feed_posts").update({ is_pinned: false }).eq("is_pinned", true);
+    }
+
     const { data, error } = await supabase
       .from("feed_posts")
       .insert({
-        user_id: userId,
-        photo_url: photoUrl,
-        caption,
+        user_id: effectiveUserId,
+        photo_url: photoUrl || "",
+        caption: caption || "",
         city: "Défi Officiel",
         is_pinned: isPinned,
         is_official: true,
@@ -437,12 +454,61 @@ export async function createOfficialPost(userId: string, photoUrl: string, capti
   }
 }
 
+export async function updateFeedPost(
+  postId: string | number,
+  updates: {
+    caption?: string;
+    photo_url?: string;
+    is_pinned?: boolean;
+    is_official?: boolean;
+  },
+) {
+  if (!isSupabaseConfigured) return null;
+
+  try {
+    if (updates.is_pinned === true) {
+      // Unpin other posts first
+      await supabase.from("feed_posts").update({ is_pinned: false }).neq("id", postId).eq("is_pinned", true);
+    }
+
+    const { data, error } = await supabase
+      .from("feed_posts")
+      .update(updates)
+      .eq("id", postId)
+      .select()
+      .single();
+
+    if (error) {
+      console.warn("Could not update feed post:", error);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.warn("Update feed post error:", err);
+    return null;
+  }
+}
+
+export async function togglePinPost(postId: string | number, isPinned: boolean) {
+  return updateFeedPost(postId, { is_pinned: isPinned });
+}
+
 export async function deleteFeedPost(postId: string | number) {
   if (!isSupabaseConfigured) return;
   try {
     await supabase.from("feed_posts").delete().eq("id", postId);
   } catch (err) {
     console.warn("Could not delete post:", err);
+  }
+}
+
+export async function deleteSquadAdmin(squadId: string) {
+  if (!isSupabaseConfigured) return;
+  try {
+    await supabase.from("squad_members").delete().eq("squad_id", squadId);
+    await supabase.from("squads").delete().eq("id", squadId);
+  } catch (err) {
+    console.warn("Could not delete squad as admin:", err);
   }
 }
 
@@ -669,8 +735,12 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
 
         return {
           id: item.id,
-          author: isRecruit ? "VALUO Matchmaking" : (item.profiles?.name || "Joueur VALUO"),
-          city: isRecruit ? "Arène VALUO" : (item.city || "France"),
+          author: isRecruit
+            ? "VALUO Matchmaking"
+            : item.is_official
+            ? (item.profiles?.name || "Game Master VALUO")
+            : (item.profiles?.name || "Joueur VALUO"),
+          city: isRecruit ? "Arène VALUO" : item.is_official ? "Défi Officiel" : (item.city || "France"),
           avatar: isRecruit
             ? "https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=300&w=300"
             : (item.profiles?.avatar_url || avatars.lea),
