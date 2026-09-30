@@ -3,20 +3,27 @@ import {
   Camera,
   Check,
   Clock3,
+  Edit3,
+  Flag,
   Flame,
   Heart,
+  Loader2,
   MapPin,
   MessageCircle,
   MoreHorizontal,
   Pin,
+  PinOff,
   Radio,
   Send,
   Share2,
   Sparkles,
+  Trash2,
+  Upload,
   UserPlus,
   Users,
+  X,
 } from "lucide-react";
-import { type FormEvent, useMemo, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from "react";
 import { type FeedPost, type UserProfile } from "@/data";
 import { type ChallengeData } from "../services/feedService";
 
@@ -33,6 +40,9 @@ export type FeedViewProps = {
   onShare: (post: FeedPost) => void;
   onAddComment: (postId: number | string, text: string) => void;
   onJoinSquad?: (code: string) => void;
+  onDeletePost?: (postId: string | number) => void;
+  onUpdatePost?: (postId: string | number, updates: { caption?: string; photo?: string }) => void;
+  onTogglePinPost?: (postId: string | number, currentPinStatus: boolean) => void;
 };
 
 const filters: { id: FeedFilter; label: string }[] = [
@@ -52,10 +62,90 @@ export default function FeedView({
   onShare,
   onAddComment,
   onJoinSquad,
+  onDeletePost,
+  onUpdatePost,
+  onTogglePinPost,
 }: FeedViewProps) {
   const [filter, setFilter] = useState<FeedFilter>("recents");
   const [openComments, setOpenComments] = useState<number | string | null>(null);
   const [drafts, setDrafts] = useState<Record<string | number, string>>({});
+
+  // Dropdown menu & modals state
+  const [activeMenuPostId, setActiveMenuPostId] = useState<string | number | null>(null);
+  const [editingPost, setEditingPost] = useState<FeedPost | null>(null);
+  const [editCaption, setEditCaption] = useState("");
+  const [editPhoto, setEditPhoto] = useState("");
+  const [deleteConfirmPost, setDeleteConfirmPost] = useState<FeedPost | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [actionNotice, setActionNotice] = useState("");
+
+  const isAdmin = Boolean(currentUser.isAdmin || currentUser.name === "Dxne - Admin");
+
+  // Close menus on outside click
+  useEffect(() => {
+    function handleClickOutside() {
+      setActiveMenuPostId(null);
+    }
+    window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, []);
+
+  // Notice auto dismiss
+  useEffect(() => {
+    if (!actionNotice) return;
+    const timer = setTimeout(() => setActionNotice(""), 3000);
+    return () => clearTimeout(timer);
+  }, [actionNotice]);
+
+  function handleOpenEdit(post: FeedPost) {
+    setEditingPost(post);
+    setEditCaption(post.caption || "");
+    setEditPhoto(post.photo || "");
+    setActiveMenuPostId(null);
+  }
+
+  function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          setEditPhoto(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  async function handleSaveEdit(event: FormEvent) {
+    event.preventDefault();
+    if (!editingPost) return;
+
+    setSavingEdit(true);
+    try {
+      await onUpdatePost?.(editingPost.id, {
+        caption: editCaption.trim(),
+        photo: editPhoto,
+      });
+      setEditingPost(null);
+      setActionNotice("Publication mise à jour avec succès !");
+    } catch {
+      setActionNotice("Erreur lors de la mise à jour.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteConfirmPost) return;
+    try {
+      await onDeletePost?.(deleteConfirmPost.id);
+      setDeleteConfirmPost(null);
+      setActionNotice("Publication supprimée.");
+    } catch {
+      setActionNotice("Erreur lors de la suppression.");
+    }
+  }
 
   const visiblePosts = useMemo(() => {
     // 1. Pinned posts ALWAYS remain at index 0 on top and cannot be pushed down
@@ -186,8 +276,16 @@ export default function FeedView({
         <AnimatePresence mode="popLayout">
           {visiblePosts.map((post, index) => {
             const commentsOpen = openComments === post.id;
-            const isUser = post.author === currentUser.name || post.author === "Léa M." || post.author === "Léa";
+            const isUser = Boolean(
+              currentUser.name &&
+              (post.author === currentUser.name ||
+               post.author.split(" ")[0] === currentUser.name.split(" ")[0] ||
+               post.author === "Léa M." ||
+               post.author === "Léa")
+            );
+            const canManage = isUser || isAdmin;
             const isFriend = friends.includes(post.author);
+            const isMenuOpen = activeMenuPostId === post.id;
 
             return (
               <motion.article
@@ -198,7 +296,7 @@ export default function FeedView({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.35, delay: Math.min(index, 4) * 0.04 }}
-                className={`overflow-hidden rounded-[26px] bg-white transition ${
+                className={`overflow-hidden rounded-[26px] bg-white transition relative ${
                   post.isPinned
                     ? "border-2 border-[#f3c969] shadow-[0_16px_40px_-18px_rgba(243,201,105,.55)] ring-4 ring-[#f3c969]/10"
                     : "border border-[#173f35]/8"
@@ -279,9 +377,85 @@ export default function FeedView({
                   <span className="hidden rounded-full bg-[#fff1e8] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[#e9683a] sm:inline">
                     {post.isRecruitment ? "Escouade" : (challenge?.theme || "Défi photo")}
                   </span>
-                  <button type="button" aria-label="Plus d'options" className="rounded-full p-2 text-[#8c968f] hover:bg-[#f5f0e5]">
-                    <MoreHorizontal size={17} />
-                  </button>
+
+                  {/* 3-DOTS OPTIONS DROPDOWN MENU */}
+                  <div className="relative" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      aria-label="Plus d'options"
+                      onClick={() => setActiveMenuPostId(isMenuOpen ? null : post.id)}
+                      className="rounded-full p-2 text-[#8c968f] hover:bg-[#f5f0e5] transition"
+                    >
+                      <MoreHorizontal size={17} />
+                    </button>
+
+                    {isMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 w-52 rounded-2xl border border-[#173f35]/10 bg-white p-1.5 shadow-2xl z-30 divide-y divide-[#173f35]/8">
+                        <div className="space-y-0.5 pb-1">
+                          {canManage && !post.isRecruitment && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(post)}
+                              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-[#173f35] transition hover:bg-[#f5efe6]"
+                            >
+                              <Edit3 size={14} className="text-[#173f35]" /> Modifier la publication
+                            </button>
+                          )}
+
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuPostId(null);
+                                onTogglePinPost?.(post.id, Boolean(post.isPinned));
+                              }}
+                              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-[#173f35] transition hover:bg-[#f5efe6]"
+                            >
+                              {post.isPinned ? <PinOff size={14} className="text-[#e9683a]" /> : <Pin size={14} className="text-[#f3c969]" />}
+                              {post.isPinned ? "Désépingler du feed" : "Épingler en tête"}
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuPostId(null);
+                              onShare(post);
+                            }}
+                            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-[#173f35] transition hover:bg-[#f5efe6]"
+                          >
+                            <Share2 size={14} /> Partager le post
+                          </button>
+                        </div>
+
+                        <div className="space-y-0.5 pt-1">
+                          {canManage ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuPostId(null);
+                                setDeleteConfirmPost(post);
+                              }}
+                              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50"
+                            >
+                              <Trash2 size={14} /> Supprimer la publication
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuPostId(null);
+                                setActionNotice("Publication signalée aux modérateurs.");
+                              }}
+                              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-neutral-600 transition hover:bg-neutral-100"
+                            >
+                              <Flag size={14} /> Signaler cette publication
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* POST BODY: RECRUITMENT BANNER (NO PHOTO) OR REGULAR PHOTO */}
@@ -456,6 +630,138 @@ export default function FeedView({
           </div>
         )}
       </div>
+
+      {/* EDIT POST MODAL */}
+      <AnimatePresence>
+        {editingPost && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setEditingPost(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 15 }}
+              className="relative w-full max-w-lg overflow-hidden rounded-[32px] bg-white p-6 sm:p-8 shadow-2xl z-10"
+            >
+              <div className="flex items-center justify-between border-b border-[#173f35]/10 pb-4">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-[#173f35] text-white">
+                    <Edit3 size={15} />
+                  </span>
+                  <h3 className="font-display text-xl font-bold text-[#173f35]">Modifier la publication</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingPost(null)}
+                  className="grid h-8 w-8 place-items-center rounded-full text-[#7a8780] hover:bg-[#f5f0e5]"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEdit} className="mt-5 space-y-4">
+                {editPhoto && (
+                  <div>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-[#526259]">Photo</label>
+                    <div className="mt-2 flex items-center gap-4">
+                      <img src={editPhoto} alt="Aperçu" className="h-20 w-20 rounded-2xl object-cover border border-[#173f35]/10 shadow-sm" />
+                      <label className="flex cursor-pointer items-center gap-2 rounded-full border-2 border-dashed border-[#173f35]/20 bg-[#fbf8f1] px-4 py-2.5 text-xs font-extrabold text-[#173f35] transition hover:border-[#e9683a] hover:bg-white hover:text-[#e9683a]">
+                        <Upload size={14} /> Changer la photo
+                        <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-[#526259]">Légende / Message</label>
+                  <textarea
+                    rows={4}
+                    value={editCaption}
+                    onChange={(e) => setEditCaption(e.target.value)}
+                    placeholder="Votre légende…"
+                    className="mt-1.5 w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] p-4 text-sm text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
+                  />
+                </div>
+
+                <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-[#173f35]/10">
+                  <button
+                    type="button"
+                    onClick={() => setEditingPost(null)}
+                    className="rounded-full px-5 py-2.5 text-xs font-bold text-[#6f7e76] hover:bg-[#f5f0e5]"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEdit || !editCaption.trim()}
+                    className="flex items-center gap-2 rounded-full bg-[#e9683a] px-6 py-2.5 text-xs font-extrabold text-white shadow-lg shadow-[#e9683a]/25 transition hover:bg-[#d9582d] disabled:opacity-50"
+                  >
+                    {savingEdit ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" /> Enregistrement…
+                      </>
+                    ) : (
+                      "Enregistrer les modifications"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* DELETE CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {deleteConfirmPost && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDeleteConfirmPost(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 15 }}
+              className="relative w-full max-w-md overflow-hidden rounded-[32px] bg-white p-6 sm:p-8 shadow-2xl z-10 text-center"
+            >
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-red-100 text-red-600">
+                <Trash2 size={26} />
+              </div>
+              <h3 className="mt-4 font-display text-xl font-bold text-[#173f35]">Supprimer cette publication ?</h3>
+              <p className="mt-2 text-xs leading-relaxed text-[#6f7e76]">
+                Cette publication sera définitivement supprimée du feed. Cette action est irréversible.
+              </p>
+
+              <div className="mt-6 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmPost(null)}
+                  className="rounded-full border border-[#173f35]/15 bg-white px-5 py-2.5 text-xs font-bold text-[#173f35] hover:bg-[#f5f0e5]"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  className="rounded-full bg-red-600 px-6 py-2.5 text-xs font-extrabold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-700"
+                >
+                  Supprimer définitivement
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

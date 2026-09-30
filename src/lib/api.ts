@@ -812,6 +812,24 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
     }
   }
 
+  // Clean up and filter out any recruitment posts whose squad no longer exists in DB
+  if (isSupabaseConfigured && posts.some((p) => p.isRecruitment && p.squadCode)) {
+    try {
+      const { data: activeSquads } = await supabase.from("squads").select("code");
+      const activeCodes = new Set((activeSquads || []).map((s: any) => s.code));
+
+      const stalePosts = posts.filter((p) => p.isRecruitment && p.squadCode && !activeCodes.has(p.squadCode));
+      if (stalePosts.length > 0) {
+        for (const sp of stalePosts) {
+          supabase.from("feed_posts").delete().eq("id", sp.id).then();
+        }
+        posts = posts.filter((p) => !(p.isRecruitment && p.squadCode && !activeCodes.has(p.squadCode)));
+      }
+    } catch (e) {
+      console.warn("Could not prune stale recruitment posts:", e);
+    }
+  }
+
   // Clean up any stale recruitment cache keys in localStorage that no longer exist in live Supabase DB
   if (isSupabaseConfigured && typeof window !== "undefined") {
     try {

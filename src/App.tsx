@@ -38,6 +38,8 @@ import {
   fetchMysteryItem,
   type MysteryItemData,
   fetchUserFriends,
+  togglePinPost,
+  updateFeedPost,
   fetchUserNotifications,
   fetchUserProfile,
   fetchUserSquad,
@@ -793,6 +795,45 @@ export default function App() {
     }
   }
 
+  async function handleDeleteFeedPost(postId: string | number) {
+    try {
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      await deleteFeedPost(postId);
+      setNotice("Publication supprimée avec succès.");
+      await loadPublicData();
+    } catch (e: any) {
+      console.error("Error deleting post:", e);
+      setNotice(e?.message || "Erreur lors de la suppression de la publication.");
+      await loadPublicData();
+    }
+  }
+
+  async function handleUpdateFeedPost(postId: string | number, updates: { caption?: string; photo?: string }) {
+    try {
+      await updateFeedPost(postId, {
+        caption: updates.caption,
+        photo_url: updates.photo,
+      });
+      setNotice("Publication mise à jour avec succès.");
+      await loadPublicData();
+    } catch (e: any) {
+      console.error("Error updating post:", e);
+      setNotice(e?.message || "Erreur lors de la mise à jour de la publication.");
+    }
+  }
+
+  async function handleTogglePinFeedPost(postId: string | number, currentPinStatus: boolean) {
+    try {
+      const nextPin = !currentPinStatus;
+      await togglePinPost(postId, nextPin);
+      setNotice(nextPin ? "Publication épinglée en tête du feed." : "Publication désépinglée.");
+      await loadPublicData();
+    } catch (e: any) {
+      console.error("Error toggling pin:", e);
+      setNotice(e?.message || "Erreur lors du changement d'épinglage.");
+    }
+  }
+
   async function markAllNotificationsAsRead() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     setNotice("Toutes les notifications sont marquées comme lues.");
@@ -1009,6 +1050,9 @@ export default function App() {
                     onShare={share}
                     onAddComment={addComment}
                     onJoinSquad={joinGroup}
+                    onDeletePost={handleDeleteFeedPost}
+                    onUpdatePost={handleUpdateFeedPost}
+                    onTogglePinPost={handleTogglePinFeedPost}
                   />
                 )}
                 {activeTab === "game" && (
