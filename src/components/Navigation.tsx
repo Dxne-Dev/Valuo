@@ -117,23 +117,43 @@ export function DesktopNavigation({
         setIsHovered(false);
         setNotifOpen(false);
       }}
-      className={`sticky top-0 z-40 hidden h-screen shrink-0 flex-col border-r border-[#173f35]/10 bg-[#f5f0e5] py-7 transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] lg:flex ${
-        isHovered ? "w-[268px] px-6 shadow-2xl" : "w-[78px] px-3.5"
+      className={`sticky top-0 z-40 hidden h-screen shrink-0 flex-col justify-between border-r border-[#173f35]/10 bg-[#f5f0e5] py-4 transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] lg:flex select-none ${
+        isHovered ? "w-[268px] px-5 shadow-2xl" : "w-[78px] px-3"
       }`}
     >
-      {/* Header Logo */}
-      <div className="flex items-center overflow-hidden">
-        {isHovered ? (
-          <Logo />
-        ) : (
-          <div className="mx-auto">
-            <Logo compact />
-          </div>
+      {/* 1. Header Logo (Fix shrink & text overflow) */}
+      <div className="flex items-center gap-3 shrink-0 min-h-[44px] overflow-hidden">
+        <div className="relative shrink-0 flex items-center justify-center w-10 h-10 mx-auto lg:mx-0">
+          <img
+            src="/V_logo_palette_transparent.png"
+            alt="VALUO"
+            className="h-full w-full object-contain drop-shadow-sm transition duration-300 hover:scale-105"
+          />
+        </div>
+        {isHovered && (
+          <motion.div
+            initial={{ opacity: 0, x: -6 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -6 }}
+            transition={{ duration: 0.18 }}
+            className="leading-none min-w-0 flex-1 overflow-hidden"
+          >
+            <p className="font-logo text-[24px] font-normal tracking-wide leading-none text-[#173f35] truncate">
+              VALUO
+            </p>
+            <p className="mt-1 text-[8px] font-extrabold uppercase tracking-[0.16em] text-[#173f35]/45 truncate">
+              Snap · Estime · Triomphe
+            </p>
+          </motion.div>
         )}
       </div>
 
-      {/* Navigation Links */}
-      <nav className="mt-10 space-y-2" aria-label="Navigation principale">
+      {/* 2. Navigation Links (Responsive density & scroll support) */}
+      <nav
+        className="mt-4 flex-1 min-h-0 space-y-1 overflow-y-auto overscroll-contain pr-0.5"
+        style={{ scrollbarWidth: "none" }}
+        aria-label="Navigation principale"
+      >
         {currentNavItems.map((item) => {
           const Icon = item.icon;
           const selected = item.id === active;
@@ -143,18 +163,18 @@ export function DesktopNavigation({
               type="button"
               onClick={() => onNavigate(item.id)}
               title={!isHovered ? item.label : undefined}
-              className={`relative flex w-full items-center rounded-2xl py-3.5 text-sm font-semibold transition-colors ${
-                isHovered ? "gap-3 px-4" : "justify-center px-0"
+              className={`relative flex w-full items-center rounded-xl py-2.5 text-xs font-bold transition-colors ${
+                isHovered ? "gap-3 px-3.5" : "justify-center px-0"
               } ${selected ? "text-white" : "text-[#506158] hover:bg-white/70 hover:text-[#173f35]"}`}
             >
               {selected && (
                 <motion.span
                   layoutId="desktop-nav"
-                  className="absolute inset-0 rounded-2xl bg-[#173f35] shadow-[0_10px_24px_-12px_rgba(23,63,53,.7)]"
+                  className="absolute inset-0 rounded-xl bg-[#173f35] shadow-[0_8px_20px_-10px_rgba(23,63,53,.6)]"
                   transition={{ type: "spring", stiffness: 420, damping: 34 }}
                 />
               )}
-              <Icon className="relative shrink-0" size={20} strokeWidth={2.2} />
+              <Icon className="relative shrink-0" size={19} strokeWidth={2.2} />
               {isHovered && (
                 <span className="relative truncate whitespace-nowrap">{item.label}</span>
               )}
@@ -175,8 +195,8 @@ export function DesktopNavigation({
             type="button"
             onClick={() => setNotifOpen(!notifOpen)}
             title={!isHovered ? "Notifications" : undefined}
-            className={`relative flex w-full items-center rounded-2xl py-3.5 text-sm font-semibold transition-colors ${
-              isHovered ? "gap-3 px-4" : "justify-center px-0"
+            className={`relative flex w-full items-center rounded-xl py-2.5 text-xs font-bold transition-colors ${
+              isHovered ? "gap-3 px-3.5" : "justify-center px-0"
             } ${
               active === "notifications" || notifOpen
                 ? "bg-white text-[#173f35] shadow-sm"
@@ -184,7 +204,7 @@ export function DesktopNavigation({
             }`}
           >
             <div className="relative shrink-0">
-              <Bell size={20} strokeWidth={2.2} />
+              <Bell size={19} strokeWidth={2.2} />
               {unreadCount > 0 && (
                 <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-[#e9683a] px-1 text-[9px] font-extrabold text-white ring-2 ring-[#f5f0e5]">
                   {unreadCount}
@@ -299,15 +319,15 @@ export function DesktopNavigation({
         </div>
       </nav>
 
-      {/* Barre de progression (Semaine) */}
-      <div className="mt-8 border-t border-[#173f35]/10 pt-6 overflow-hidden">
+      {/* 3. Progression Semaine (Fix shrink & clipping) */}
+      <div className="shrink-0 pt-3 mt-2 border-t border-[#173f35]/10 overflow-hidden">
         {isHovered ? (
           <div>
-            <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.14em] text-[#76837c]">
+            <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#76837c]">
               <span>Semaine {weekNumber}</span>
               <span>Jour {dayNumber}/6</span>
             </div>
-            <div className="mt-2.5 flex gap-1.5">
+            <div className="mt-1.5 flex gap-1">
               {[0, 1, 2, 3, 4, 5].map((day) => (
                 <span
                   key={day}
@@ -315,28 +335,28 @@ export function DesktopNavigation({
                 />
               ))}
             </div>
-            <p className="mt-2.5 text-xs leading-relaxed text-[#76837c]">
+            <p className="mt-1.5 text-[11px] leading-tight text-[#76837c] line-clamp-2">
               {cycleMessage}
             </p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-1">
-            <span className="text-[10px] font-bold text-[#76837c]">J{dayNumber}/6</span>
-            <div className="h-1.5 w-8 rounded-full bg-[#e9683a]" />
+            <span className="text-[9px] font-extrabold text-[#76837c]">J{dayNumber}/6</span>
+            <div className="h-1.5 w-7 rounded-full bg-[#e9683a]" />
           </div>
         )}
       </div>
 
-      {/* Profil Utilisateur (Bas de sidebar) */}
+      {/* 4. Profil Utilisateur (Fix shrink & spacing) */}
       <div
-        className={`mt-auto flex items-center border-t border-[#173f35]/10 pt-5 ${
-          isHovered ? "gap-3" : "justify-center"
+        className={`shrink-0 flex items-center pt-2.5 mt-2 border-t border-[#173f35]/10 ${
+          isHovered ? "gap-2.5" : "justify-center"
         }`}
       >
         <img
           src={currentAvatar}
           alt={currentName}
-          className="h-10 w-10 shrink-0 cursor-pointer rounded-full object-cover transition hover:scale-105"
+          className="h-9 w-9 shrink-0 cursor-pointer rounded-full object-cover ring-2 ring-white transition hover:scale-105"
           onClick={() => onNavigate("profile")}
         />
         {isHovered && (
@@ -346,16 +366,16 @@ export function DesktopNavigation({
               onClick={() => onNavigate("profile")}
               className="min-w-0 flex-1 text-left"
             >
-              <p className="truncate text-sm font-bold text-[#173f35]">{currentName}</p>
-              <p className="truncate text-xs text-[#76837c]">{currentCity}</p>
+              <p className="truncate text-xs font-extrabold text-[#173f35]">{currentName}</p>
+              <p className="truncate text-[10px] text-[#76837c]">{currentCity}</p>
             </button>
             <button
               type="button"
               onClick={onLogout}
               aria-label="Se déconnecter"
-              className="rounded-full p-2 text-[#76837c] transition hover:bg-white hover:text-[#e9683a]"
+              className="rounded-full p-1.5 text-[#76837c] transition hover:bg-white hover:text-[#e9683a]"
             >
-              <LogOut size={17} />
+              <LogOut size={16} />
             </button>
           </>
         )}
