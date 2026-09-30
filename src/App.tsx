@@ -239,8 +239,8 @@ export default function App() {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  // Supabase Realtime: push updates for challenge, feed posts, and mystery items
-  // When the admin changes any of these in the DB, all connected clients see it instantly.
+  // Supabase Realtime: push updates for all live tables
+  // When the admin or any user changes data, all connected clients see it instantly.
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
@@ -266,6 +266,24 @@ export default function App() {
           if (updated) setPosts(updated);
         },
       )
+      // Post likes: live like count updates
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "post_likes" },
+        async () => {
+          const updated = await fetchFeedPosts(userIdRef || undefined);
+          if (updated) setPosts(updated);
+        },
+      )
+      // Post comments: comments appear in real time under posts
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "post_comments" },
+        async () => {
+          const updated = await fetchFeedPosts(userIdRef || undefined);
+          if (updated) setPosts(updated);
+        },
+      )
       // Mystery items: admin updates the mystery box
       .on(
         "postgres_changes",
@@ -273,6 +291,31 @@ export default function App() {
         async () => {
           const updated = await fetchMysteryItem();
           if (updated) setMysteryItem(updated);
+        },
+      )
+      // Notifications: user receives a new notification instantly
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: userIdRef ? `user_id=eq.${userIdRef}` : undefined,
+        },
+        async () => {
+          if (!userIdRef) return;
+          const updated = await fetchUserNotifications(userIdRef);
+          if (updated) setNotifications(updated);
+        },
+      )
+      // Squad members: someone joins or leaves your squad
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "squad_members" },
+        async () => {
+          if (!userIdRef) return;
+          const updated = await fetchUserSquad(userIdRef);
+          if (updated) setGroup(updated);
         },
       )
       .subscribe();
