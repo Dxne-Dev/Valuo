@@ -436,32 +436,25 @@ export async function createOfficialPost(
   let effectiveUserId = userId;
   const isUuid = effectiveUserId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveUserId);
   if (!isUuid) {
-    const { data: { user } } = await supabase.auth.getUser();
-    effectiveUserId = user?.id || null;
-  }
-
-  // Ensure effectiveUserId exists in public.profiles, otherwise leave null for system/Game Master post
-  if (effectiveUserId) {
-    const { data: profile } = await supabase.from("profiles").select("id").eq("id", effectiveUserId).maybeSingle();
-    if (!profile) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      effectiveUserId = user?.id || null;
+    } catch {
       effectiveUserId = null;
     }
   }
 
-  if (isPinned) {
-    // Unpin any previously pinned posts
-    const { error: unpinErr } = await supabase.from("feed_posts").update({ is_pinned: false }).eq("is_pinned", true);
-    if (unpinErr) {
-      console.warn("Could not unpin existing posts:", unpinErr);
-    }
-  }
+  // If pinned, unpin existing pinned posts concurrently
+  const unpinPromise = isPinned
+    ? supabase.from("feed_posts").update({ is_pinned: false }).eq("is_pinned", true)
+    : Promise.resolve();
 
-  const { data, error } = await supabase
+  const insertPromise = supabase
     .from("feed_posts")
     .insert({
       user_id: effectiveUserId,
       photo_url: photoUrl || media.redPhone,
-      caption: caption || "",
+      caption: sanitizeInput(caption || ""),
       city: "Défi Officiel",
       is_pinned: isPinned,
       is_official: true,
@@ -469,12 +462,14 @@ export async function createOfficialPost(
     .select()
     .single();
 
-  if (error) {
-    console.error("CRITICAL: Supabase insert into feed_posts failed:", error);
-    throw new Error(error.message || "Impossible de publier l'annonce officielle");
+  const [, insertRes] = await Promise.all([unpinPromise, insertPromise]);
+
+  if (insertRes.error) {
+    console.error("CRITICAL: Supabase insert into feed_posts failed:", insertRes.error);
+    throw new Error(insertRes.error.message || "Impossible de publier l'annonce officielle");
   }
 
-  return data;
+  return insertRes.data;
 }
 
 export async function updateFeedPost(

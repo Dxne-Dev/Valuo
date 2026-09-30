@@ -38,6 +38,7 @@ import {
   saveMysteryItem,
   togglePinPost,
   updateFeedPost,
+  uploadImage,
 } from "../services/adminService";
 
 export type AdminViewProps = {
@@ -120,6 +121,7 @@ export default function AdminView({
   // Announcement state
   const [editingPostId, setEditingPostId] = useState<string | number | null>(null);
   const [announcementPhoto, setAnnouncementPhoto] = useState(media.redPhone);
+  const [announcementFile, setAnnouncementFile] = useState<File | null>(null);
   const [announcementCaption, setAnnouncementCaption] = useState(
     "Défi officiel du jour lancé ! Capturez un objet ou un détail correspondant au thème et partagez votre photo avant minuit.",
   );
@@ -129,6 +131,7 @@ export default function AdminView({
   // Mystery form state
   const [mysteryTitle, setMysteryTitle] = useState(mysteryItem.title);
   const [mysteryImage, setMysteryImage] = useState(mysteryItem.image);
+  const [mysteryFile, setMysteryFile] = useState<File | null>(null);
   const [mysteryBrief, setMysteryBrief] = useState(mysteryItem.brief);
   const [mysteryHint, setMysteryHint] = useState(mysteryItem.hint);
   const [mysteryRealPrice, setMysteryRealPrice] = useState(String(mysteryItem.realPrice));
@@ -139,6 +142,7 @@ export default function AdminView({
   const [editingModalPost, setEditingModalPost] = useState<FeedPost | null>(null);
   const [editPostCaption, setEditPostCaption] = useState("");
   const [editPostPhoto, setEditPostPhoto] = useState("");
+  const [modPostFile, setModPostFile] = useState<File | null>(null);
 
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -208,6 +212,7 @@ export default function AdminView({
   function startEditingOfficialPost(post: FeedPost) {
     setEditingPostId(post.id);
     setAnnouncementPhoto(post.photo || media.redPhone);
+    setAnnouncementFile(null);
     setAnnouncementCaption(post.caption || "");
     setIsPinned(post.isPinned || false);
     onNotice(`Modification du post officiel en cours.`);
@@ -216,6 +221,7 @@ export default function AdminView({
   function resetOfficialPostForm() {
     setEditingPostId(null);
     setAnnouncementPhoto(media.redPhone);
+    setAnnouncementFile(null);
     setAnnouncementCaption(
       "Défi officiel du jour lancé ! Capturez un objet ou un détail correspondant au thème et partagez votre photo avant minuit.",
     );
@@ -228,11 +234,17 @@ export default function AdminView({
 
     setPublishingPost(true);
     try {
+      let finalPhotoUrl = announcementPhoto;
+      if (announcementFile) {
+        const uploaded = await uploadImage(announcementFile, "posts");
+        if (uploaded) finalPhotoUrl = uploaded;
+      }
+
       if (editingPostId) {
         // UPDATE existing post
         await updateFeedPost(editingPostId, {
           caption: announcementCaption.trim(),
-          photo_url: announcementPhoto,
+          photo_url: finalPhotoUrl,
           is_pinned: isPinned,
           is_official: true,
         });
@@ -240,7 +252,7 @@ export default function AdminView({
       } else {
         // CREATE new official post
         const uid = currentUserId || null;
-        await createOfficialPost(uid, announcementPhoto, announcementCaption.trim(), isPinned);
+        await createOfficialPost(uid, finalPhotoUrl, announcementCaption.trim(), isPinned);
         onNotice("Annonce officielle Game Master publiée dans le feed.");
       }
       await onPostCreated();
@@ -293,15 +305,22 @@ export default function AdminView({
     event.preventDefault();
     if (!mysteryTitle.trim()) return;
 
+    let finalImageUrl = mysteryImage;
+    if (mysteryFile) {
+      const uploaded = await uploadImage(mysteryFile, "posts");
+      if (uploaded) finalImageUrl = uploaded;
+    }
+
     const updated: MysteryItemData = {
       title: mysteryTitle.trim(),
-      image: mysteryImage,
+      image: finalImageUrl,
       brief: mysteryBrief.trim(),
       hint: mysteryHint.trim(),
       realPrice: Number(mysteryRealPrice) || 50,
     };
 
     await saveMysteryItem(updated);
+    setMysteryFile(null);
     onMysteryUpdated(updated);
     onNotice("Mystery Box du jour mise à jour avec succès.");
   }
@@ -311,17 +330,25 @@ export default function AdminView({
     setEditingModalPost(post);
     setEditPostCaption(post.caption || "");
     setEditPostPhoto(post.photo || "");
+    setModPostFile(null);
   }
 
   async function handleSaveEditedPost(event: FormEvent) {
     event.preventDefault();
     if (!editingModalPost) return;
 
+    let finalPhotoUrl = editPostPhoto;
+    if (modPostFile) {
+      const uploaded = await uploadImage(modPostFile, "posts");
+      if (uploaded) finalPhotoUrl = uploaded;
+    }
+
     await updateFeedPost(editingModalPost.id, {
       caption: editPostCaption.trim(),
-      photo_url: editPostPhoto,
+      photo_url: finalPhotoUrl,
     });
     setEditingModalPost(null);
+    setModPostFile(null);
     onPostCreated();
     onNotice("Publication mise à jour avec succès.");
   }
@@ -358,13 +385,18 @@ export default function AdminView({
     });
   }
 
-  function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>, setter: (val: string) => void) {
+  function handlePhotoUpload(
+    event: ChangeEvent<HTMLInputElement>,
+    previewSetter: (val: string) => void,
+    fileSetter?: (file: File | null) => void,
+  ) {
     const file = event.target.files?.[0];
     if (file) {
+      if (fileSetter) fileSetter(file);
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === "string") {
-          setter(reader.result);
+          previewSetter(reader.result);
         }
       };
       reader.readAsDataURL(file);
@@ -713,7 +745,7 @@ export default function AdminView({
                   <img src={announcementPhoto} alt="Aperçu" className="h-20 w-20 rounded-2xl object-cover border-2 border-[#173f35]/10 shadow-sm" />
                   <label className="flex cursor-pointer items-center gap-2 rounded-full border-2 border-dashed border-[#173f35]/20 bg-[#fbf8f1] px-4 py-2.5 text-xs font-extrabold text-[#173f35] transition hover:border-[#e9683a] hover:bg-white hover:text-[#e9683a]">
                     <Upload size={15} /> Changer la photo
-                    <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, setAnnouncementPhoto)} className="hidden" />
+                    <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, setAnnouncementPhoto, setAnnouncementFile)} className="hidden" />
                   </label>
                 </div>
               </div>
@@ -800,7 +832,7 @@ export default function AdminView({
                 <img src={mysteryImage} alt="Objet Mystère" className="h-20 w-20 rounded-2xl object-cover border-2 border-[#173f35]/10" />
                 <label className="flex cursor-pointer items-center gap-2 rounded-full border-2 border-dashed border-[#173f35]/20 bg-[#fbf8f1] px-4 py-2.5 text-xs font-extrabold text-[#173f35] transition hover:border-[#e9683a] hover:bg-white hover:text-[#e9683a]">
                   <Upload size={15} /> Téléverser l'image
-                  <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, setMysteryImage)} className="hidden" />
+                  <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, setMysteryImage, setMysteryFile)} className="hidden" />
                 </label>
               </div>
             </div>
@@ -1074,7 +1106,7 @@ export default function AdminView({
                       <img src={editPostPhoto} alt="" className="h-16 w-16 rounded-xl object-cover border" />
                       <label className="flex cursor-pointer items-center gap-2 rounded-full border border-[#173f35]/20 bg-[#fbf8f1] px-3.5 py-2 text-xs font-bold text-[#173f35] hover:bg-white">
                         <Upload size={14} /> Changer la photo
-                        <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, setEditPostPhoto)} className="hidden" />
+                        <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, setEditPostPhoto, setModPostFile)} className="hidden" />
                       </label>
                     </div>
                   </div>

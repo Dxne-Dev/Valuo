@@ -15,6 +15,7 @@ import {
   saveMysteryItem,
   togglePinPost,
   updateFeedPost,
+  uploadImage,
 } from "@/lib/api";
 
 export {
@@ -28,6 +29,7 @@ export {
   deactivateActiveChallenge,
   saveActiveChallenge,
   saveMysteryItem,
+  uploadImage,
 };
 export type { AdminMetrics, AdminSquadSummary, ChallengeData, MysteryItemData };
 
