@@ -208,7 +208,7 @@ BEGIN
         COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1), 'Chasseur VALUO'),
         COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://images.pexels.com/photos/14842170/pexels-photo-14842170.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=300&w=300'),
         COALESCE(NEW.raw_user_meta_data->>'city', 'Bordeaux'),
-        COALESCE((NEW.raw_user_meta_data->>'is_admin')::boolean, (NEW.email = 'alasanemomo244@gmail.com'), false)
+        COALESCE((NEW.raw_user_meta_data->>'is_admin')::boolean, (NEW.email = 'metierpro158@gmail.com'), false)
     )
     ON CONFLICT (id) DO UPDATE SET
         is_admin = COALESCE(EXCLUDED.is_admin, profiles.is_admin);

@@ -268,8 +268,8 @@ export default function App() {
 
         const isUserAdmin = Boolean(
           profile?.isAdmin === true ||
-          sessionUser?.email === "alasanemomo244@gmail.com" ||
-          authIdentifier === "alasanemomo244@gmail.com"
+          sessionUser?.email === "metierpro158@gmail.com" ||
+          authIdentifier === "metierpro158@gmail.com"
         );
 
         const isTempPassword = Boolean(sessionUser?.user_metadata?.needs_password_change === true);
@@ -342,7 +342,7 @@ export default function App() {
 
   const isAdminUser = Boolean(
     currentUser?.isAdmin === true ||
-    authIdentifier === "alasanemomo244@gmail.com"
+    authIdentifier === "metierpro158@gmail.com"
   );
 
   // Admin route guard: if a non-admin accesses /admin, redirect them safely to /
@@ -770,7 +770,7 @@ export default function App() {
       setAuthLoading(true);
 
       const isUserAdmin = Boolean(
-        identifier === "alasanemomo244@gmail.com" ||
+        identifier === "metierpro158@gmail.com" ||
         localStorage.getItem(`valuo_user_profile_${newUid}`)?.includes('"isAdmin":true')
       );
 
