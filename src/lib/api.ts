@@ -582,36 +582,54 @@ export async function saveMysteryItem(item: Partial<MysteryItemData>) {
   // mystery_boxes is the single source of truth — update today's active item
   if (isSupabaseConfigured) {
     try {
-      // Try to update the existing active item for today first
+      const todayStr = new Date().toISOString().split("T")[0];
+      const dayOfWeek = new Date().getDay(); // 0=Sun, 1=Mon ... 6=Sat
+      const dayNumber = dayOfWeek === 0 ? 6 : Math.min(dayOfWeek, 6);
+
+      // Try to find the existing active item or today's item
       const { data: existing } = await supabase
         .from("mystery_boxes")
         .select("id")
-        .eq("active", true)
+        .or(`active.eq.true,date.eq.${todayStr}`)
+        .order("date", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (existing?.id) {
-        await supabase.from("mystery_boxes").update({
-          item_name: item.title,
-          photo_url: item.image,
-          description: item.brief || "",
-          history_details: item.hint || "",
-          real_price: item.realPrice || 0,
-        }).eq("id", existing.id);
+        const updatePayload: Record<string, any> = {
+          active: true,
+          date: todayStr,
+        };
+        if (item.title !== undefined) updatePayload.item_name = item.title;
+        if (item.image !== undefined) updatePayload.photo_url = item.image;
+        if (item.brief !== undefined) updatePayload.description = item.brief;
+        if (item.hint !== undefined) updatePayload.history_details = item.hint;
+        if (item.realPrice !== undefined) updatePayload.real_price = item.realPrice;
+
+        const { error: updateErr } = await supabase
+          .from("mystery_boxes")
+          .update(updatePayload)
+          .eq("id", existing.id);
+
+        if (updateErr) {
+          console.warn("Could not update mystery box in Supabase:", updateErr);
+        }
       } else {
         // No active item yet — insert one for today
-        // day_number constraint: 1=Mon ... 6=Sat, cap Sunday at 6
-        const dayOfWeek = new Date().getDay(); // 0=Sun, 1=Mon ... 6=Sat
-        const dayNumber = dayOfWeek === 0 ? 6 : Math.min(dayOfWeek, 6);
-        await supabase.from("mystery_boxes").insert({
-          item_name: item.title,
-          photo_url: item.image,
+        const { error: insertErr } = await supabase.from("mystery_boxes").insert({
+          item_name: item.title || "Vase en faïence à décor floral",
+          photo_url: item.image || media.mystery,
           description: item.brief || "",
           history_details: item.hint || "",
-          real_price: item.realPrice || 0,
-          date: new Date().toISOString().split("T")[0],
+          real_price: item.realPrice || 68,
+          date: todayStr,
           day_number: dayNumber,
           active: true,
         });
+
+        if (insertErr) {
+          console.warn("Could not insert mystery box into Supabase:", insertErr);
+        }
       }
     } catch (err) {
       console.warn("Could not save mystery item to Supabase:", err);

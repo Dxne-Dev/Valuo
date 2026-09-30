@@ -3,19 +3,25 @@ import { ArrowLeft, Check, Clock3, Info, PackageOpen, RotateCcw, Sparkles, Troph
 import { type FormEvent, useMemo, useState } from "react";
 import { type GroupData, media, type UserProfile } from "@/data";
 import { computeRankings } from "../services/gameService";
-
-const realPrice = 68;
+import type { MysteryItemData } from "@/lib/api";
 
 export type GameViewProps = {
   group?: GroupData | null;
   currentUser?: UserProfile;
+  mysteryItem?: MysteryItemData | null;
   onOpenGroup: () => void;
 };
 
-export default function GameView({ group, currentUser, onOpenGroup }: GameViewProps) {
+export default function GameView({ group, currentUser, mysteryItem, onOpenGroup }: GameViewProps) {
   const [estimate, setEstimate] = useState("");
   const [revealed, setRevealed] = useState(false);
   const amount = Number(estimate.replace(",", ".")) || 0;
+
+  const itemTitle = mysteryItem?.title || "Vase en faïence à décor floral";
+  const itemImage = mysteryItem?.image || media.mystery;
+  const itemBrief = mysteryItem?.brief || "Hauteur 31 cm. Signature partiellement visible sous la base. Quelques traces du temps, sans éclat majeur.";
+  const itemHint = mysteryItem?.hint || "Une pièce décorative qui a traversé au moins trois générations.";
+  const realPrice = Number(mysteryItem?.realPrice) || 68;
 
   const members = useMemo(() => {
     if (group?.members && group.members.length > 0) {
@@ -35,7 +41,7 @@ export default function GameView({ group, currentUser, onOpenGroup }: GameViewPr
 
   const { results, userRank, earned } = useMemo(() => {
     return computeRankings(members, amount, realPrice);
-  }, [members, amount]);
+  }, [members, amount, realPrice]);
 
   function submitEstimate(event: FormEvent) {
     event.preventDefault();
@@ -73,18 +79,18 @@ export default function GameView({ group, currentUser, onOpenGroup }: GameViewPr
             className="grid overflow-hidden rounded-[32px] bg-white shadow-[0_24px_70px_-40px_rgba(23,63,53,.45)] md:grid-cols-[1.08fr_.92fr]"
           >
             <div className="relative min-h-[430px] overflow-hidden bg-[#d9d0bf] md:min-h-[590px]">
-              <img src={media.mystery} alt="Vase en faïence, objet mystère du jour" className="absolute inset-0 h-full w-full object-cover" />
+              <img src={itemImage} alt={itemTitle} className="absolute inset-0 h-full w-full object-cover" />
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent p-6 pt-24 text-white md:p-8">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#f3c969]">Indice du jour</p>
-                <p className="mt-2 max-w-md font-display text-xl font-semibold">Une pièce décorative qui a traversé au moins trois générations.</p>
+                <p className="mt-2 max-w-md font-display text-xl font-semibold">{itemHint}</p>
               </div>
             </div>
 
             <div className="flex flex-col justify-center p-6 sm:p-9 md:p-10">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#e9683a]">Objet du jour</p>
-              <h2 className="mt-3 font-display text-3xl font-semibold leading-tight text-[#173f35]">Vase en faïence à décor floral</h2>
+              <h2 className="mt-3 font-display text-3xl font-semibold leading-tight text-[#173f35]">{itemTitle}</h2>
               <p className="mt-4 text-sm leading-7 text-[#66766d]">
-                Hauteur 31 cm. Signature partiellement visible sous la base. Quelques traces du temps, sans éclat majeur.
+                {itemBrief}
               </p>
 
               <div className="my-7 h-px bg-[#173f35]/10" />

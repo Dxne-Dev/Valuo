@@ -19,11 +19,13 @@ import {
 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { type GroupData, media, type UserProfile } from "@/data";
+import type { MysteryItemData } from "@/lib/api";
 
 export type GroupViewProps = {
   group: GroupData | null;
   friends: string[];
-  currentUser: UserProfile;
+  currentUser?: UserProfile;
+  mysteryItem?: MysteryItemData | null;
   onCreateGroup: (name: string, invitedFriends: string[]) => void;
   onJoinGroup: (code: string) => void;
   onAutoMatch: () => void;
@@ -36,6 +38,7 @@ export type GroupViewProps = {
 export default function GroupView({
   group,
   friends,
+  mysteryItem,
   onCreateGroup,
   onJoinGroup,
   onAutoMatch,
@@ -402,7 +405,15 @@ export default function GroupView({
                           { day: 5, name: "Téléphone à cadran rotatif", photo: media.redPhone, price: "110 €" },
                           { day: 6, name: "Paire de figurines céramique", photo: media.figurines, price: "75 €" },
                         ];
-                        const itemData = mysteryItems[idx] || mysteryItems[0];
+                        const defaultItemData = mysteryItems[idx] || mysteryItems[0];
+                        const itemData = isToday && mysteryItem
+                          ? {
+                              day: idx + 1,
+                              name: mysteryItem.title || defaultItemData.name,
+                              photo: mysteryItem.image || defaultItemData.photo,
+                              price: `${mysteryItem.realPrice || 68} €`,
+                            }
+                          : defaultItemData;
 
                         if (isToday) {
                           return (

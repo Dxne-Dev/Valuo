@@ -1015,6 +1015,7 @@ export default function App() {
                   <GameView
                     group={group}
                     currentUser={currentUser}
+                    mysteryItem={mysteryItem}
                     onOpenGroup={() => navigate("group")}
                   />
                 )}
@@ -1023,6 +1024,7 @@ export default function App() {
                     group={group}
                     friends={friends}
                     currentUser={currentUser}
+                    mysteryItem={mysteryItem}
                     onCreateGroup={createGroup}
                     onJoinGroup={joinGroup}
                     onAutoMatch={autoMatch}
