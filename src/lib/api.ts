@@ -463,26 +463,25 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
     realPrice: 68,
   };
 
-  // Supabase is source of truth
+  // mystery_boxes is the single source of truth (6 items/week, active = today's item)
   if (isSupabaseConfigured) {
     try {
       const { data, error } = await supabase
-        .from("mystery_items")
+        .from("mystery_boxes")
         .select("*")
         .eq("active", true)
-        .order("created_at", { ascending: false })
+        .order("date", { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (!error && data) {
         const item: MysteryItemData = {
-          title: data.title,
-          image: data.image,
-          brief: data.brief || "",
-          hint: data.hint || "",
+          title: data.item_name,
+          image: data.photo_url,
+          brief: data.description || "",
+          hint: data.history_details || "",
           realPrice: Number(data.real_price) || 0,
         };
-        // Update local cache
         if (typeof window !== "undefined") {
           localStorage.setItem("valuo_mystery_item", JSON.stringify(item));
         }
@@ -503,20 +502,37 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
 }
 
 export async function saveMysteryItem(item: Partial<MysteryItemData>) {
-  // Write to Supabase first
+  // mystery_boxes is the single source of truth — update today's active item
   if (isSupabaseConfigured) {
     try {
-      // Deactivate current active item
-      await supabase.from("mystery_items").update({ active: false }).eq("active", true);
-      // Insert the new one
-      await supabase.from("mystery_items").insert({
-        title: item.title,
-        image: item.image,
-        brief: item.brief || "",
-        hint: item.hint || "",
-        real_price: item.realPrice || 0,
-        active: true,
-      });
+      // Try to update the existing active item for today first
+      const { data: existing } = await supabase
+        .from("mystery_boxes")
+        .select("id")
+        .eq("active", true)
+        .maybeSingle();
+
+      if (existing?.id) {
+        await supabase.from("mystery_boxes").update({
+          item_name: item.title,
+          photo_url: item.image,
+          description: item.brief || "",
+          history_details: item.hint || "",
+          real_price: item.realPrice || 0,
+        }).eq("id", existing.id);
+      } else {
+        // No active item yet — insert one for today
+        await supabase.from("mystery_boxes").insert({
+          item_name: item.title,
+          photo_url: item.image,
+          description: item.brief || "",
+          history_details: item.hint || "",
+          real_price: item.realPrice || 0,
+          date: new Date().toISOString().split("T")[0],
+          day_number: new Date().getDay() || 7,
+          active: true,
+        });
+      }
     } catch (err) {
       console.warn("Could not save mystery item to Supabase:", err);
     }

@@ -284,10 +284,10 @@ export default function App() {
           if (updated) setPosts(updated);
         },
       )
-      // Mystery items: admin updates the mystery box
+      // Mystery boxes: admin updates today's object (feeds both the feed display and game engine)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "mystery_items" },
+        { event: "*", schema: "public", table: "mystery_boxes" },
         async () => {
           const updated = await fetchMysteryItem();
           if (updated) setMysteryItem(updated);
