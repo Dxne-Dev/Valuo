@@ -502,9 +502,20 @@ export async function deleteFeedPost(postId: string | number) {
   }
 }
 
-export async function deleteSquadAdmin(squadId: string) {
+export async function deleteSquadAdmin(squadId: string, squadCode?: string) {
   if (!isSupabaseConfigured) return;
   try {
+    let code = squadCode;
+    if (!code) {
+      const { data } = await supabase.from("squads").select("code").eq("id", squadId).maybeSingle();
+      code = data?.code;
+    }
+
+    if (code) {
+      removeActiveRecruitmentLocalCache(code);
+      await deleteRecruitmentPostBySquadCode(code);
+    }
+
     await supabase.from("squad_members").delete().eq("squad_id", squadId);
     await supabase.from("squads").delete().eq("id", squadId);
   } catch (err) {

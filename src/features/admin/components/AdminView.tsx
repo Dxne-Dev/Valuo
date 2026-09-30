@@ -325,13 +325,14 @@ export default function AdminView({
     setConfirmModal({
       open: true,
       title: `Dissoudre l'escouade « ${squad.name} » ?`,
-      description: `Les ${squad.membersCount} membres seront libérés du groupe (${squad.code}) et pourront rejoindre ou créer une nouvelle escouade.`,
+      description: `L'escouade sera dissoute, ses ${squad.membersCount} membres seront libérés et son annonce de recrutement dans le feed sera automatiquement supprimée.`,
       confirmText: "Dissoudre",
       onConfirm: async () => {
-        await deleteSquadAdmin(squad.id);
+        await deleteSquadAdmin(squad.id, squad.code);
         setSquadsList((prev) => prev.filter((s) => s.id !== squad.id));
         setMetrics((prev) => ({ ...prev, totalSquads: Math.max(0, prev.totalSquads - 1) }));
-        onNotice(`L'escouade « ${squad.name} » a été dissoute.`);
+        onPostCreated();
+        onNotice(`L'escouade « ${squad.name} » a été dissoute et son post supprimé du feed.`);
       },
     });
   }
