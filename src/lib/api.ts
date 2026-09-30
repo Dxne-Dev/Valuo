@@ -353,33 +353,59 @@ export async function fetchActiveChallenge(): Promise<ChallengeData | null> {
 
 export async function saveActiveChallenge(challenge: Partial<ChallengeData>) {
   if (isSupabaseConfigured) {
-    const { error: updateErr } = await supabase
+    const todayDateStr = new Date().toISOString().split("T")[0];
+
+    // Check if there is an existing challenge for today or an active one
+    const { data: existing } = await supabase
       .from("daily_challenges")
-      .update({ active: false })
-      .eq("active", true);
+      .select("id")
+      .or(`date.eq.${todayDateStr},active.eq.true`)
+      .limit(1)
+      .maybeSingle();
 
-    if (updateErr) {
-      console.warn("Supabase deactivate old challenge error:", updateErr);
+    if (existing?.id) {
+      // UPDATE the existing row
+      const { data, error: updateErr } = await supabase
+        .from("daily_challenges")
+        .update({
+          theme: challenge.theme,
+          brief: challenge.brief,
+          active: true,
+          date: todayDateStr,
+        })
+        .eq("id", existing.id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        console.error("CRITICAL: Supabase update daily_challenges failed:", updateErr);
+        throw new Error(updateErr.message || "Écriture refusée par Supabase");
+      }
+
+      return data;
+    } else {
+      // INSERT or UPSERT on conflict date
+      const { data, error: upsertErr } = await supabase
+        .from("daily_challenges")
+        .upsert(
+          {
+            theme: challenge.theme,
+            brief: challenge.brief,
+            date: todayDateStr,
+            active: true,
+          },
+          { onConflict: "date" }
+        )
+        .select()
+        .single();
+
+      if (upsertErr) {
+        console.error("CRITICAL: Supabase upsert daily_challenges failed:", upsertErr);
+        throw new Error(upsertErr.message || "Écriture refusée par Supabase");
+      }
+
+      return data;
     }
-
-    const { data, error: insertErr } = await supabase
-      .from("daily_challenges")
-      .insert({
-        theme: challenge.theme,
-        brief: challenge.brief,
-        date: new Date().toISOString(),
-        active: true,
-        remaining: challenge.remaining || "6 h 24",
-      })
-      .select()
-      .single();
-
-    if (insertErr) {
-      console.error("CRITICAL: Supabase saveActiveChallenge failed:", insertErr);
-      throw new Error(insertErr.message || "Écriture refusée par Supabase");
-    }
-
-    return data;
   }
 }
 
