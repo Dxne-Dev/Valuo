@@ -7,7 +7,6 @@ import {
   type GroupData,
   type GroupMember,
   media,
-  todayChallenge,
   type UserProfile,
 } from "../data";
 import {
@@ -309,9 +308,10 @@ export type ChallengeData = {
 };
 
 export async function deactivateActiveChallenge() {
+  // Always clear local caches so the current browser reflects the change immediately
   if (typeof window !== "undefined") {
     localStorage.removeItem("valuo_custom_challenge");
-    localStorage.setItem("valuo_challenge_deactivated", "true");
+    localStorage.removeItem("valuo_challenge_cache_ts");
   }
   if (!isSupabaseConfigured) return;
   try {
@@ -325,75 +325,87 @@ export async function deactivateActiveChallenge() {
 }
 
 export async function fetchActiveChallenge(): Promise<ChallengeData | null> {
-  if (typeof window !== "undefined" && localStorage.getItem("valuo_challenge_deactivated") === "true") {
-    return null;
-  }
+  // Supabase is the source of truth. localStorage is only a short-lived cache (30s).
+  const CACHE_TTL_MS = 30_000;
 
-  const cached = typeof window !== "undefined" ? localStorage.getItem("valuo_custom_challenge") : null;
-  let localChallenge: ChallengeData | null = null;
-  if (cached) {
+  if (isSupabaseConfigured) {
     try {
-      const parsed = JSON.parse(cached);
-      if (parsed && parsed.theme) localChallenge = parsed;
-    } catch {}
-  }
+      const { data, error } = await supabase
+        .from("daily_challenges")
+        .select("*")
+        .eq("active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-  if (!isSupabaseConfigured) return localChallenge;
+      if (!error && data) {
+        const challenge: ChallengeData = {
+          id: data.id,
+          theme: data.theme,
+          date: new Date(data.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
+          brief: data.brief,
+          remaining: data.remaining || "6 h 24",
+        };
+        // Update local cache
+        if (typeof window !== "undefined") {
+          localStorage.setItem("valuo_custom_challenge", JSON.stringify(challenge));
+          localStorage.setItem("valuo_challenge_cache_ts", String(Date.now()));
+          localStorage.removeItem("valuo_challenge_deactivated");
+        }
+        return challenge;
+      }
 
-  try {
-    const { data, error } = await supabase
-      .from("daily_challenges")
-      .select("*")
-      .eq("active", true)
-      .order("date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error || !data) return localChallenge;
-
-    const challenge: ChallengeData = {
-      id: data.id,
-      theme: data.theme,
-      date: new Date(data.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
-      brief: data.brief,
-      remaining: data.remaining || "6 h 24",
-    };
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("valuo_custom_challenge", JSON.stringify(challenge));
+      // Supabase returned no active challenge — treat as deactivated
+      if (!error && !data) {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("valuo_custom_challenge");
+          localStorage.removeItem("valuo_challenge_cache_ts");
+        }
+        return null;
+      }
+    } catch {
+      // Network error: fall through to cache
     }
-
-    return challenge;
-  } catch {
-    return localChallenge;
   }
+
+  // Fallback: read local cache if fresh enough
+  if (typeof window !== "undefined") {
+    const cached = localStorage.getItem("valuo_custom_challenge");
+    const ts = Number(localStorage.getItem("valuo_challenge_cache_ts") || "0");
+    if (cached && Date.now() - ts < CACHE_TTL_MS) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.theme) return parsed as ChallengeData;
+      } catch {}
+    }
+  }
+
+  return null;
 }
 
 export async function saveActiveChallenge(challenge: Partial<ChallengeData>) {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("valuo_challenge_deactivated");
-    const existing = localStorage.getItem("valuo_custom_challenge");
-    let merged = { ...todayChallenge, ...challenge };
-    if (existing) {
-      try { merged = { ...JSON.parse(existing), ...challenge }; } catch {}
+  // Write to Supabase first (source of truth), then update local cache
+  if (isSupabaseConfigured) {
+    try {
+      await supabase.from("daily_challenges").update({ active: false }).eq("active", true);
+      await supabase.from("daily_challenges").insert({
+        theme: challenge.theme,
+        brief: challenge.brief,
+        date: new Date().toISOString(),
+        active: true,
+        remaining: challenge.remaining || "6 h 24",
+      });
+    } catch (err) {
+      console.warn("Could not save challenge to Supabase:", err);
     }
-    localStorage.setItem("valuo_custom_challenge", JSON.stringify(merged));
   }
 
-  if (!isSupabaseConfigured) return;
-
-  try {
-    await supabase.from("daily_challenges").update({ active: false }).eq("active", true);
-
-    await supabase.from("daily_challenges").insert({
-      theme: challenge.theme,
-      brief: challenge.brief,
-      date: new Date().toISOString(),
-      active: true,
-      remaining: challenge.remaining || "6 h 24",
-    });
-  } catch (err) {
-    console.warn("Could not save challenge to Supabase:", err);
+  // Always update local cache so the admin browser reflects it immediately
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("valuo_challenge_deactivated");
+    const merged = { ...challenge, date: challenge.date || new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) };
+    localStorage.setItem("valuo_custom_challenge", JSON.stringify(merged));
+    localStorage.setItem("valuo_challenge_cache_ts", String(Date.now()));
   }
 }
 
@@ -451,6 +463,37 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
     realPrice: 68,
   };
 
+  // Supabase is source of truth
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from("mystery_items")
+        .select("*")
+        .eq("active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data) {
+        const item: MysteryItemData = {
+          title: data.title,
+          image: data.image,
+          brief: data.brief || "",
+          hint: data.hint || "",
+          realPrice: Number(data.real_price) || 0,
+        };
+        // Update local cache
+        if (typeof window !== "undefined") {
+          localStorage.setItem("valuo_mystery_item", JSON.stringify(item));
+        }
+        return item;
+      }
+    } catch {
+      // Network error: fall through to local cache
+    }
+  }
+
+  // Local cache fallback
   const cached = typeof window !== "undefined" ? localStorage.getItem("valuo_mystery_item") : null;
   if (cached) {
     try { return { ...defaultMystery, ...JSON.parse(cached) }; } catch {}
@@ -460,9 +503,29 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
 }
 
 export async function saveMysteryItem(item: Partial<MysteryItemData>) {
+  // Write to Supabase first
+  if (isSupabaseConfigured) {
+    try {
+      // Deactivate current active item
+      await supabase.from("mystery_items").update({ active: false }).eq("active", true);
+      // Insert the new one
+      await supabase.from("mystery_items").insert({
+        title: item.title,
+        image: item.image,
+        brief: item.brief || "",
+        hint: item.hint || "",
+        real_price: item.realPrice || 0,
+        active: true,
+      });
+    } catch (err) {
+      console.warn("Could not save mystery item to Supabase:", err);
+    }
+  }
+
+  // Always update local cache so the admin browser sees it instantly
   if (typeof window !== "undefined") {
     const cached = localStorage.getItem("valuo_mystery_item");
-    let merged = { ...item };
+    let merged: Partial<MysteryItemData> = { ...item };
     if (cached) {
       try { merged = { ...JSON.parse(cached), ...item }; } catch {}
     }

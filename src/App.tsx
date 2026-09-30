@@ -239,6 +239,49 @@ export default function App() {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
+  // Supabase Realtime: push updates for challenge, feed posts, and mystery items
+  // When the admin changes any of these in the DB, all connected clients see it instantly.
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const userIdRef = userId;
+
+    const channel = supabase
+      .channel("valuo_public_realtime")
+      // Daily challenges: admin activates / deactivates
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "daily_challenges" },
+        async () => {
+          const updated = await fetchActiveChallenge();
+          setActiveChallenge(updated);
+        },
+      )
+      // Feed posts: admin pins a post, user publishes, etc.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "feed_posts" },
+        async () => {
+          const updated = await fetchFeedPosts(userIdRef || undefined);
+          if (updated) setPosts(updated);
+        },
+      )
+      // Mystery items: admin updates the mystery box
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "mystery_items" },
+        async () => {
+          const updated = await fetchMysteryItem();
+          if (updated) setMysteryItem(updated);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, isSupabaseConfigured]);
+
   async function loadPublicData() {
     try {
       const challenge = await fetchActiveChallenge();
