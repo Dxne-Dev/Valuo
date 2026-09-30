@@ -739,7 +739,7 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
         is_official,
         likes_count,
         created_at,
-        profiles (
+        profiles:profiles!feed_posts_user_id_fkey (
           id,
           name,
           avatar_url
@@ -751,7 +751,7 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
           id,
           text,
           created_at,
-          profiles (
+          profiles:profiles!post_comments_user_id_fkey (
             name,
             avatar_url
           )
@@ -759,6 +759,10 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
       `)
       .order("is_pinned", { ascending: false })
       .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("fetchFeedPosts DB error:", error);
+    }
 
     if (!error && data && data.length > 0) {
       posts = data.map((item: any) => {
