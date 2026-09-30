@@ -184,15 +184,15 @@ export async function signOutUser() {
 }
 
 export async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
-  const cached = typeof window !== "undefined" ? localStorage.getItem(`valuo_user_profile_${userId}`) : null;
-  let localProfile: UserProfile | null = null;
-  if (cached) {
-    try {
-      localProfile = JSON.parse(cached);
-    } catch {}
+  if (!isSupabaseConfigured) {
+    const cached = typeof window !== "undefined" ? localStorage.getItem(`valuo_user_profile_${userId}`) : null;
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
   }
-
-  if (!isSupabaseConfigured) return localProfile;
 
   try {
     const { data } = await supabase
@@ -204,35 +204,30 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
     const { data: authData } = await supabase.auth.getUser();
     const meta = authData?.user?.user_metadata;
 
+    // Security: Admin rights strictly determined by Supabase DB / verified metadata
     const isAdmin = Boolean(
       data?.is_admin === true ||
-      meta?.is_admin === true ||
-      localProfile?.isAdmin === true
+      meta?.is_admin === true
     );
 
-    // Prioritize explicit onboarding choices from localProfile or auth metadata over default trigger values
-    const effectiveName = (localProfile?.name && localProfile.name !== "Chasseur VALUO" && localProfile.name !== "Joueur VALUO" ? localProfile.name : (meta?.name || data?.name)) || "Joueur VALUO";
-    const effectiveCity = (localProfile?.city && localProfile.city !== "France" ? localProfile.city : (meta?.city || data?.city)) || "France";
-    const effectiveAvatar = (localProfile?.avatar ? localProfile.avatar : (meta?.avatar_url || data?.avatar_url)) || avatars.lea;
+    const effectiveName = data?.name || meta?.name || "Joueur VALUO";
+    const effectiveCity = data?.city || meta?.city || "France";
+    const effectiveAvatar = data?.avatar_url || meta?.avatar_url || avatars.lea;
 
     const fetchedProfile: UserProfile = {
       name: effectiveName,
       city: effectiveCity,
-      bio: data?.bio || localProfile?.bio || "",
+      bio: data?.bio || "",
       avatar: effectiveAvatar,
-      cover: data?.cover_url || localProfile?.cover || "https://images.pexels.com/photos/8099796/pexels-photo-8099796.jpeg",
-      memberSince: data?.member_since || localProfile?.memberSince || "Septembre 2026",
+      cover: data?.cover_url || "https://images.pexels.com/photos/8099796/pexels-photo-8099796.jpeg",
+      memberSince: data?.member_since || "Septembre 2026",
       isAdmin,
     };
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem(`valuo_user_profile_${userId}`, JSON.stringify(fetchedProfile));
-    }
 
     return fetchedProfile;
   } catch (e) {
     console.warn("fetchUserProfile error:", e);
-    return localProfile;
+    return null;
   }
 }
 

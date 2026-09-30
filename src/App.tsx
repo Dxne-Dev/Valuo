@@ -856,29 +856,18 @@ export default function App() {
       setAuthLoading(true);
 
       const isUserAdmin = Boolean(
-        identifier === "metierpro158@gmail.com" ||
-        localStorage.getItem(`valuo_user_profile_${newUid}`)?.includes('"isAdmin":true')
+        identifier === "metierpro158@gmail.com"
       );
 
       // Determine initial onboarded state (will be refined in loadUserData)
       const isAlreadyOnboarded = Boolean(
         !isTempPassword ||
-        isUserAdmin ||
-        localStorage.getItem(`valuo_onboarded_${newUid}`) === "true"
+        isUserAdmin
       );
 
       setIsOnboarded(isAlreadyOnboarded);
       if (isUserAdmin && location.pathname === "/") {
         routerNavigate("/admin");
-      }
-
-      // Check if user already has a saved profile in localStorage
-      const cached = localStorage.getItem(`valuo_user_profile_${newUid}`);
-      if (cached) {
-        try {
-          const existingProfile = JSON.parse(cached);
-          if (existingProfile) setCurrentUser(existingProfile);
-        } catch {}
       }
 
       await loadUserData(newUid);
