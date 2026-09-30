@@ -303,26 +303,19 @@ export type ChallengeData = {
 };
 
 export async function deactivateActiveChallenge() {
-  // Always clear local caches so the current browser reflects the change immediately
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("valuo_custom_challenge");
-    localStorage.removeItem("valuo_challenge_cache_ts");
-  }
   if (!isSupabaseConfigured) return;
-  try {
-    await supabase
-      .from("daily_challenges")
-      .update({ active: false })
-      .eq("active", true);
-  } catch (err) {
-    console.warn("Could not deactivate challenge:", err);
+  const { error } = await supabase
+    .from("daily_challenges")
+    .update({ active: false })
+    .eq("active", true);
+
+  if (error) {
+    console.error("deactivateActiveChallenge error:", error);
+    throw new Error(error.message || "Erreur lors du retrait du défi");
   }
 }
 
 export async function fetchActiveChallenge(): Promise<ChallengeData | null> {
-  // Supabase is the source of truth. localStorage is only a short-lived cache (30s).
-  const CACHE_TTL_MS = 30_000;
-
   if (isSupabaseConfigured) {
     try {
       const { data, error } = await supabase
@@ -333,45 +326,25 @@ export async function fetchActiveChallenge(): Promise<ChallengeData | null> {
         .limit(1)
         .maybeSingle();
 
-      if (!error && data) {
-        const challenge: ChallengeData = {
+      if (error) {
+        console.warn("fetchActiveChallenge DB error:", error);
+        return null;
+      }
+
+      if (data) {
+        return {
           id: data.id,
           theme: data.theme,
           date: new Date(data.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
           brief: data.brief,
           remaining: data.remaining || "6 h 24",
         };
-        // Update local cache
-        if (typeof window !== "undefined") {
-          localStorage.setItem("valuo_custom_challenge", JSON.stringify(challenge));
-          localStorage.setItem("valuo_challenge_cache_ts", String(Date.now()));
-          localStorage.removeItem("valuo_challenge_deactivated");
-        }
-        return challenge;
       }
 
-      // Supabase returned no active challenge — treat as deactivated
-      if (!error && !data) {
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("valuo_custom_challenge");
-          localStorage.removeItem("valuo_challenge_cache_ts");
-        }
-        return null;
-      }
-    } catch {
-      // Network error: fall through to cache
-    }
-  }
-
-  // Fallback: read local cache if fresh enough
-  if (typeof window !== "undefined") {
-    const cached = localStorage.getItem("valuo_custom_challenge");
-    const ts = Number(localStorage.getItem("valuo_challenge_cache_ts") || "0");
-    if (cached && Date.now() - ts < CACHE_TTL_MS) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (parsed && parsed.theme) return parsed as ChallengeData;
-      } catch {}
+      return null;
+    } catch (err) {
+      console.warn("fetchActiveChallenge network error:", err);
+      return null;
     }
   }
 
@@ -379,28 +352,34 @@ export async function fetchActiveChallenge(): Promise<ChallengeData | null> {
 }
 
 export async function saveActiveChallenge(challenge: Partial<ChallengeData>) {
-  // Write to Supabase first (source of truth), then update local cache
   if (isSupabaseConfigured) {
-    try {
-      await supabase.from("daily_challenges").update({ active: false }).eq("active", true);
-      await supabase.from("daily_challenges").insert({
+    const { error: updateErr } = await supabase
+      .from("daily_challenges")
+      .update({ active: false })
+      .eq("active", true);
+
+    if (updateErr) {
+      console.warn("Supabase deactivate old challenge error:", updateErr);
+    }
+
+    const { data, error: insertErr } = await supabase
+      .from("daily_challenges")
+      .insert({
         theme: challenge.theme,
         brief: challenge.brief,
         date: new Date().toISOString(),
         active: true,
         remaining: challenge.remaining || "6 h 24",
-      });
-    } catch (err) {
-      console.warn("Could not save challenge to Supabase:", err);
-    }
-  }
+      })
+      .select()
+      .single();
 
-  // Always update local cache so the admin browser reflects it immediately
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("valuo_challenge_deactivated");
-    const merged = { ...challenge, date: challenge.date || new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) };
-    localStorage.setItem("valuo_custom_challenge", JSON.stringify(merged));
-    localStorage.setItem("valuo_challenge_cache_ts", String(Date.now()));
+    if (insertErr) {
+      console.error("CRITICAL: Supabase saveActiveChallenge failed:", insertErr);
+      throw new Error(insertErr.message || "Écriture refusée par Supabase");
+    }
+
+    return data;
   }
 }
 

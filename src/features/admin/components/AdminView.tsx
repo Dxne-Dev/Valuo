@@ -183,15 +183,25 @@ export default function AdminView({
       date: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
     };
 
-    await saveActiveChallenge(updated);
-    onChallengeUpdated(updated);
-    onNotice("Défi du jour publié avec succès sur le feed.");
+    try {
+      await saveActiveChallenge(updated);
+      onChallengeUpdated(updated);
+      onNotice("Défi du jour publié avec succès sur le feed.");
+    } catch (err: any) {
+      console.error("Save challenge failed:", err);
+      onNotice(`Erreur lors de la publication : ${err.message || "écriture refusée par Supabase"}`);
+    }
   }
 
   async function handleDeactivateChallenge() {
-    await deactivateActiveChallenge();
-    onChallengeUpdated(null);
-    onNotice("Défi du jour retiré du feed.");
+    try {
+      await deactivateActiveChallenge();
+      onChallengeUpdated(null);
+      onNotice("Défi du jour retiré du feed.");
+    } catch (err: any) {
+      console.error("Deactivate challenge failed:", err);
+      onNotice(`Erreur lors du retrait du défi : ${err.message || "écriture refusée par Supabase"}`);
+    }
   }
 
   // Handle Official Post Form
