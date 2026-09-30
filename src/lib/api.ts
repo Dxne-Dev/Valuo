@@ -415,43 +415,66 @@ export async function createOfficialPost(
   caption?: string,
   isPinned = true,
 ) {
-  if (!isSupabaseConfigured) return null;
-
-  try {
-    let effectiveUserId = userId;
-    const isUuid = effectiveUserId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveUserId);
-    if (!isUuid) {
-      const { data: { user } } = await supabase.auth.getUser();
-      effectiveUserId = user?.id || null;
-    }
-
-    if (isPinned) {
-      // Unpin any previously pinned posts so only the latest is pinned
-      await supabase.from("feed_posts").update({ is_pinned: false }).eq("is_pinned", true);
-    }
-
-    const { data, error } = await supabase
-      .from("feed_posts")
-      .insert({
-        user_id: effectiveUserId,
-        photo_url: photoUrl || "",
-        caption: caption || "",
-        city: "Défi Officiel",
-        is_pinned: isPinned,
-        is_official: true,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.warn("Could not create official post in DB:", error);
-      return null;
-    }
-    return data;
-  } catch (err) {
-    console.warn("Official post error:", err);
-    return null;
+  if (!isSupabaseConfigured) {
+    const localPost: FeedPost = {
+      id: Date.now(),
+      author: "Game Master VALUO",
+      city: "Défi Officiel",
+      avatar: "https://images.pexels.com/photos/3861969/pexels-photo-3861969.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=300&w=300",
+      photo: photoUrl || media.redPhone,
+      caption: caption || "",
+      time: isPinned ? "Épinglé · 08:00" : "À l'instant",
+      likes: 0,
+      liked: false,
+      isPinned,
+      isOfficial: true,
+      comments: [],
+    };
+    return localPost;
   }
+
+  let effectiveUserId = userId;
+  const isUuid = effectiveUserId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveUserId);
+  if (!isUuid) {
+    const { data: { user } } = await supabase.auth.getUser();
+    effectiveUserId = user?.id || null;
+  }
+
+  // Ensure effectiveUserId exists in public.profiles, otherwise leave null for system/Game Master post
+  if (effectiveUserId) {
+    const { data: profile } = await supabase.from("profiles").select("id").eq("id", effectiveUserId).maybeSingle();
+    if (!profile) {
+      effectiveUserId = null;
+    }
+  }
+
+  if (isPinned) {
+    // Unpin any previously pinned posts
+    const { error: unpinErr } = await supabase.from("feed_posts").update({ is_pinned: false }).eq("is_pinned", true);
+    if (unpinErr) {
+      console.warn("Could not unpin existing posts:", unpinErr);
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("feed_posts")
+    .insert({
+      user_id: effectiveUserId,
+      photo_url: photoUrl || media.redPhone,
+      caption: caption || "",
+      city: "Défi Officiel",
+      is_pinned: isPinned,
+      is_official: true,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("CRITICAL: Supabase insert into feed_posts failed:", error);
+    throw new Error(error.message || "Impossible de publier l'annonce officielle");
+  }
+
+  return data;
 }
 
 export async function updateFeedPost(
@@ -465,28 +488,24 @@ export async function updateFeedPost(
 ) {
   if (!isSupabaseConfigured) return null;
 
-  try {
-    if (updates.is_pinned === true) {
-      // Unpin other posts first
-      await supabase.from("feed_posts").update({ is_pinned: false }).neq("id", postId).eq("is_pinned", true);
-    }
-
-    const { data, error } = await supabase
-      .from("feed_posts")
-      .update(updates)
-      .eq("id", postId)
-      .select()
-      .single();
-
-    if (error) {
-      console.warn("Could not update feed post:", error);
-      return null;
-    }
-    return data;
-  } catch (err) {
-    console.warn("Update feed post error:", err);
-    return null;
+  if (updates.is_pinned === true) {
+    // Unpin other posts first
+    await supabase.from("feed_posts").update({ is_pinned: false }).neq("id", postId).eq("is_pinned", true);
   }
+
+  const { data, error } = await supabase
+    .from("feed_posts")
+    .update(updates)
+    .eq("id", postId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("CRITICAL: Supabase update feed_posts failed:", error);
+    throw new Error(error.message || "Impossible de modifier la publication");
+  }
+
+  return data;
 }
 
 export async function togglePinPost(postId: string | number, isPinned: boolean) {
@@ -495,10 +514,10 @@ export async function togglePinPost(postId: string | number, isPinned: boolean) 
 
 export async function deleteFeedPost(postId: string | number) {
   if (!isSupabaseConfigured) return;
-  try {
-    await supabase.from("feed_posts").delete().eq("id", postId);
-  } catch (err) {
-    console.warn("Could not delete post:", err);
+  const { error } = await supabase.from("feed_posts").delete().eq("id", postId);
+  if (error) {
+    console.error("CRITICAL: Supabase delete feed_posts failed:", error);
+    throw new Error(error.message || "Impossible de supprimer la publication");
   }
 }
 

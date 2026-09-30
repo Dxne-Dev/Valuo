@@ -243,11 +243,11 @@ export default function AdminView({
         await createOfficialPost(uid, announcementPhoto, announcementCaption.trim(), isPinned);
         onNotice("Annonce officielle Game Master publiée dans le feed.");
       }
-      onPostCreated();
+      await onPostCreated();
       resetOfficialPostForm();
-    } catch (err) {
-      console.warn("Error saving official post:", err);
-      onNotice("Erreur lors de la sauvegarde du post officiel.");
+    } catch (err: any) {
+      console.error("Error saving official post:", err);
+      onNotice(err?.message || "Erreur lors de la sauvegarde du post officiel.");
     } finally {
       setPublishingPost(false);
     }
@@ -260,21 +260,32 @@ export default function AdminView({
       description: "Cette publication officielle sera définitivement retirée du feed de tous les utilisateurs.",
       confirmText: "Supprimer",
       onConfirm: async () => {
-        onPostDeleted(postId);
-        await deleteFeedPost(postId);
-        if (editingPostId === postId) {
-          resetOfficialPostForm();
+        try {
+          onPostDeleted(postId);
+          await deleteFeedPost(postId);
+          if (editingPostId === postId) {
+            resetOfficialPostForm();
+          }
+          await onPostCreated();
+          onNotice("Post officiel supprimé avec succès.");
+        } catch (err: any) {
+          console.error("Error deleting post:", err);
+          onNotice(err?.message || "Erreur lors de la suppression du post.");
         }
-        onNotice("Post officiel supprimé avec succès.");
       },
     });
   }
 
   async function handleTogglePin(postId: string | number, currentPinStatus: boolean) {
-    const nextPin = !currentPinStatus;
-    await togglePinPost(postId, nextPin);
-    onPostCreated();
-    onNotice(nextPin ? "Publication épinglée en tête du feed." : "Publication désépinglée.");
+    try {
+      const nextPin = !currentPinStatus;
+      await togglePinPost(postId, nextPin);
+      await onPostCreated();
+      onNotice(nextPin ? "Publication épinglée en tête du feed." : "Publication désépinglée.");
+    } catch (err: any) {
+      console.error("Error toggling pin:", err);
+      onNotice(err?.message || "Erreur lors de la modification de l'épinglage.");
+    }
   }
 
   // Handle Mystery Box
