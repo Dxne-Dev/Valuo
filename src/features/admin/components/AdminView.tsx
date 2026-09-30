@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Settings,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -115,8 +116,19 @@ export default function AdminView({
     }
   }, [activeChallenge]);
 
-  // Current official / pinned post detected
-  const currentOfficialPost = posts.find((p) => p.isOfficial || p.isPinned) || null;
+  // Official & pinned posts list
+  const officialPosts = posts.filter((p) => p.isOfficial || p.isPinned);
+  const currentOfficialPost = officialPosts[0] || null;
+  const [activeGearMenuPostId, setActiveGearMenuPostId] = useState<string | number | null>(null);
+
+  // Close gear menus on outside click
+  useEffect(() => {
+    function handleCloseMenu() {
+      setActiveGearMenuPostId(null);
+    }
+    window.addEventListener("click", handleCloseMenu);
+    return () => window.removeEventListener("click", handleCloseMenu);
+  }, []);
 
   // Announcement state
   const [editingPostId, setEditingPostId] = useState<string | number | null>(null);
@@ -647,8 +659,8 @@ export default function AdminView({
       {/* TAB 2: POST OFFICIEL DU GAME MASTER (CRUD) */}
       {tab === "announcement" && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          {/* CURRENT PINNED / OFFICIAL POST PREVIEW CARD */}
-          {currentOfficialPost && (
+          {/* 1. SCENARIO: EXACTLY 1 OFFICIAL POST (SINGLE CARD LAYOUT) */}
+          {officialPosts.length === 1 && currentOfficialPost && (
             <div className="rounded-[28px] border-2 border-[#f3c969] bg-gradient-to-br from-[#fefbf3] to-white p-6 shadow-md">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f3c969]/30 pb-3">
                 <div className="flex items-center gap-2">
@@ -708,6 +720,131 @@ export default function AdminView({
                     <span>{currentOfficialPost.comments?.length || 0} commentaires</span>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* 2. SCENARIO: MULTIPLE OFFICIAL POSTS (4:3 GRID WITH GEAR ACTION DRAWER) */}
+          {officialPosts.length >= 2 && (
+            <div className="rounded-[28px] border-2 border-[#f3c969]/60 bg-white p-6 shadow-md space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#173f35]/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1.5 rounded-full bg-[#173f35] px-3.5 py-1 text-xs font-extrabold text-[#f3c969]">
+                    <Pin size={13} className="fill-[#f3c969]" /> Posts Officiels en Ligne ({officialPosts.length})
+                  </span>
+                  <span className="text-xs font-semibold text-[#76837c]">
+                    Format 4:3 · Cliquez sur l'engrenage pour gérer
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {officialPosts.map((post) => {
+                  const isMenuOpen = activeGearMenuPostId === post.id;
+                  return (
+                    <div
+                      key={post.id}
+                      className="group relative aspect-[4/3] overflow-hidden rounded-[22px] bg-[#173f35] shadow-md border border-[#173f35]/15 transition hover:shadow-xl"
+                    >
+                      {/* Post Photo */}
+                      <img
+                        src={post.photo}
+                        alt={post.caption}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                      />
+
+                      {/* Gradient Overlay for Readability */}
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+
+                      {/* Badges Top-Left */}
+                      <div className="absolute top-3 left-3 flex flex-col gap-1 items-start z-10">
+                        {post.isPinned ? (
+                          <span className="flex items-center gap-1 rounded-full bg-[#e9683a] px-2.5 py-0.5 text-[10px] font-black uppercase text-white shadow-md">
+                            <Pin size={11} className="fill-white" /> Épinglé
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-black/60 backdrop-blur-md px-2.5 py-0.5 text-[10px] font-bold text-white/90">
+                            Officiel
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Gear Button Top-Right & Mini Drawer */}
+                      <div className="absolute top-3 right-3 z-30" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          aria-label="Actions du post"
+                          onClick={() => setActiveGearMenuPostId(isMenuOpen ? null : post.id)}
+                          className="grid h-8 w-8 place-items-center rounded-full bg-black/65 text-white backdrop-blur-md shadow-lg transition hover:bg-[#f3c969] hover:text-[#173f35] hover:scale-110 active:scale-95"
+                          title="Actions sur ce post"
+                        >
+                          <Settings size={15} className={isMenuOpen ? "rotate-90 transition duration-300" : "transition duration-300"} />
+                        </button>
+
+                        {/* Mini Drawer Menu */}
+                        <AnimatePresence>
+                          {isMenuOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.9, y: -4 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.9, y: -4 }}
+                              className="absolute right-0 top-10 w-48 rounded-2xl border border-[#173f35]/15 bg-white p-1.5 shadow-2xl z-40 divide-y divide-[#173f35]/8 text-left"
+                            >
+                              <div className="space-y-0.5 pb-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveGearMenuPostId(null);
+                                    startEditingOfficialPost(post);
+                                  }}
+                                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-[#173f35] transition hover:bg-[#f5efe6]"
+                                >
+                                  <Edit3 size={13} /> Modifier
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveGearMenuPostId(null);
+                                    handleTogglePin(post.id, Boolean(post.isPinned));
+                                  }}
+                                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-[#173f35] transition hover:bg-[#f5efe6]"
+                                >
+                                  {post.isPinned ? <PinOff size={13} className="text-[#e9683a]" /> : <Pin size={13} className="text-[#f3c969]" />}
+                                  {post.isPinned ? "Désépingler" : "Épingler en tête"}
+                                </button>
+                              </div>
+
+                              <div className="pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveGearMenuPostId(null);
+                                    handleDeleteOfficialPost(post.id);
+                                  }}
+                                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-50"
+                                >
+                                  <Trash2 size={13} /> Supprimer
+                                </button>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      {/* Bottom Info: Caption & Likes */}
+                      <div className="absolute bottom-3 inset-x-3 text-white z-10">
+                        <p className="line-clamp-2 text-xs font-semibold leading-snug drop-shadow-sm text-white/95">
+                          {post.caption || "Défi officiel Game Master"}
+                        </p>
+                        <div className="mt-1.5 flex items-center justify-between text-[10px] font-bold text-white/75">
+                          <span>{post.time}</span>
+                          <span>{post.likes || 0} ❤️ · {post.comments?.length || 0} 💬</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
