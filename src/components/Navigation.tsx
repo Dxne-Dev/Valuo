@@ -72,7 +72,7 @@ export function DesktopNavigation({
 
   const currentNavItems = profile?.isAdmin
     ? [
-        { id: "admin" as const, label: "Game Master", icon: ShieldCheck },
+        { id: "admin" as const, label: "Dxne - Admin", icon: ShieldCheck },
         ...navItems,
       ]
     : navItems;

@@ -364,7 +364,7 @@ export default function FeedView({
                 {post.isPinned && (
                   <div className="flex items-center justify-between bg-gradient-to-r from-[#173f35] via-[#1e4e42] to-[#173f35] px-4 py-2 text-[11px] font-bold text-white">
                     <span className="flex items-center gap-1.5 text-[#f3c969]">
-                      <Pin size={13} className="fill-[#f3c969]" /> Post Épinglé · Game Master
+                      <Pin size={13} className="fill-[#f3c969]" /> Post Épinglé · Dxne - Admin
                     </span>
                     <span className="flex items-center gap-1 text-white/75">
                       <Flame size={13} className="text-[#e9683a]" /> Défi Quotidien

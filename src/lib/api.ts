@@ -617,7 +617,7 @@ export async function createOfficialPost(
   if (!isSupabaseConfigured) {
     const localPost: FeedPost = {
       id: Date.now(),
-      author: "Game Master VALUO",
+      author: "Dxne - Admin",
       city: "Défi Officiel",
       avatar: "https://images.pexels.com/photos/3861969/pexels-photo-3861969.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=300&w=300",
       photo: photoUrl || media.redPhone,
@@ -1181,7 +1181,7 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
           author: isRecruit
             ? "VALUO Matchmaking"
             : item.is_official
-            ? (item.profiles?.name || "Game Master VALUO")
+            ? (item.profiles?.name || "Dxne - Admin")
             : (item.profiles?.name || "Joueur VALUO"),
           city: isRecruit ? "Arène VALUO" : item.is_official ? "Défi Officiel" : (item.city || "France"),
           avatar: isRecruit

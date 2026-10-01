@@ -21,7 +21,7 @@ import {
   type FeedPost,
   type GroupData,
   media,
-  pinnedGameMasterPost,
+  pinnedAdminPost,
   todayChallenge,
   type UserProfile,
 } from "./data";
@@ -953,7 +953,7 @@ export default function App() {
         memberSince: "Septembre 2026",
       });
       setNotifications([]);
-      setPosts([pinnedGameMasterPost]);
+      setPosts([pinnedAdminPost]);
       setSignedIn(true);
     } else if (newUid) {
       setIsDemoUser(false);
@@ -1019,7 +1019,7 @@ export default function App() {
     setNotifications([]);
     setFriends([]);
     setGroup(null);
-    setPosts([pinnedGameMasterPost]);
+    setPosts([pinnedAdminPost]);
   }
 
   // Smooth loading splash while session initializes

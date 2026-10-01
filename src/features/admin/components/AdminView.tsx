@@ -501,7 +501,7 @@ export default function AdminView({
         // CREATE new official post
         const uid = currentUserId || null;
         await createOfficialPost(uid, finalPhotoUrl, announcementCaption.trim(), isPinned);
-        onNotice("Annonce officielle Game Master publiée dans le feed.");
+        onNotice("Annonce officielle Dxne - Admin publiée dans le feed.");
       }
       await onPostCreated();
       resetOfficialPostForm();
@@ -810,7 +810,7 @@ export default function AdminView({
                   Espace Dédié
                 </span>
                 <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-300">
-                  <Activity size={13} /> Cockpit Game Master
+                  <Activity size={13} /> Cockpit Dxne - Admin
                 </span>
               </div>
               <h1 className="mt-1 font-display text-2xl font-bold sm:text-3xl">Tableau de Bord du Jeu</h1>
@@ -1060,7 +1060,7 @@ export default function AdminView({
 
               <div>
                 <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
-                  Brief & Consignes du Game Master
+                  Brief & Consignes Dxne - Admin
                 </label>
                 <textarea
                   rows={3}
@@ -1251,7 +1251,7 @@ export default function AdminView({
         </motion.div>
       )}
 
-      {/* TAB 2: POST OFFICIEL DU GAME MASTER (CRUD) */}
+      {/* TAB 2: POST OFFICIEL DXNE - ADMIN (CRUD) */}
       {tab === "announcement" && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
           {/* 1. SCENARIO: EXACTLY 1 OFFICIAL POST (SINGLE CARD LAYOUT) */}
@@ -1430,7 +1430,7 @@ export default function AdminView({
                       {/* Bottom Info: Caption & Likes */}
                       <div className="absolute bottom-3 inset-x-3 text-white z-10">
                         <p className="line-clamp-2 text-xs font-semibold leading-snug drop-shadow-sm text-white/95">
-                          {post.caption || "Défi officiel Game Master"}
+                          {post.caption || "Défi officiel Dxne - Admin"}
                         </p>
                         <div className="mt-1.5 flex items-center justify-between text-[10px] font-bold text-white/75">
                           <span>{post.time}</span>
@@ -1472,7 +1472,7 @@ export default function AdminView({
 
             <form onSubmit={handleSaveOfficialPost} className="mt-6 space-y-4">
               <div>
-                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Photo d'inspiration du Game Master</label>
+                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Photo d'inspiration Dxne - Admin</label>
                 <div className="mt-2 flex items-center gap-4">
                   <img src={announcementPhoto} alt="Aperçu" className="h-20 w-20 rounded-2xl object-cover border-2 border-[#173f35]/10 shadow-sm" />
                   <label className="flex cursor-pointer items-center gap-2 rounded-full border-2 border-dashed border-[#173f35]/20 bg-[#fbf8f1] px-4 py-2.5 text-xs font-extrabold text-[#173f35] transition hover:border-[#e9683a] hover:bg-white hover:text-[#e9683a]">

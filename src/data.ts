@@ -124,9 +124,9 @@ export const avatarPresets = [
   { id: "hugo", label: "Hugo", url: avatars.hugo },
 ];
 
-export const pinnedGameMasterPost: FeedPost = {
+export const pinnedAdminPost: FeedPost = {
   id: 999,
-  author: "VALUO Master",
+  author: "Dxne - Admin",
   city: "Défi Officiel",
   avatar: "https://images.pexels.com/photos/3861969/pexels-photo-3861969.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=300&w=300",
   photo: media.redPhone,
