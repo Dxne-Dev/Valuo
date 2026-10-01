@@ -1117,7 +1117,13 @@ export default function App() {
         active={activeTab}
         onNavigate={navigate}
       />
-      <ComposerModal open={composerOpen} onClose={() => setComposerOpen(false)} onPublish={publish} />
+      <ComposerModal
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        onPublish={publish}
+        challenge={activeChallenge}
+        isAdmin={isAdminUser}
+      />
 
       {/* Modal de confirmation de changement d'escouade */}
       <AnimatePresence>

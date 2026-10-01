@@ -299,15 +299,22 @@ export type ChallengeData = {
   theme: string;
   date: string;
   brief: string;
-  remaining: string;
+  remaining?: string;
+  starts_at?: string;
+  ends_at?: string;
+  status?: "draft" | "scheduled" | "active" | "completed" | "archived";
+  created_at?: string;
 };
 
-export async function deactivateActiveChallenge() {
+export async function deactivateActiveChallenge(challengeId?: string | number) {
   if (!isSupabaseConfigured) return;
-  const { error } = await supabase
+  const query = supabase
     .from("daily_challenges")
-    .update({ active: false })
-    .eq("active", true);
+    .update({ active: false, status: "completed" });
+
+  const { error } = challengeId
+    ? await query.eq("id", challengeId)
+    : await query.eq("active", true);
 
   if (error) {
     console.error("deactivateActiveChallenge error:", error);
@@ -318,26 +325,65 @@ export async function deactivateActiveChallenge() {
 export async function fetchActiveChallenge(): Promise<ChallengeData | null> {
   if (isSupabaseConfigured) {
     try {
-      const { data, error } = await supabase
+      const nowIso = new Date().toISOString();
+
+      // 1. First look for an explicit active challenge whose ends_at is in the future
+      const { data: activeList, error } = await supabase
         .from("daily_challenges")
         .select("*")
         .eq("active", true)
         .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(5);
 
       if (error) {
         console.warn("fetchActiveChallenge DB error:", error);
-        return null;
       }
 
-      if (data) {
+      let chosen = activeList?.find(
+        (c) => !c.ends_at || new Date(c.ends_at).getTime() > Date.now()
+      );
+
+      // 2. If no valid active challenge found, check if a scheduled challenge has started
+      if (!chosen) {
+        const { data: scheduled } = await supabase
+          .from("daily_challenges")
+          .select("*")
+          .eq("status", "scheduled")
+          .lte("starts_at", nowIso)
+          .order("starts_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (scheduled) {
+          // Auto-promote scheduled challenge to active
+          await supabase
+            .from("daily_challenges")
+            .update({ status: "active", active: true })
+            .eq("id", scheduled.id);
+          chosen = { ...scheduled, status: "active", active: true };
+        }
+      }
+
+      // 3. Fallback: take most recent challenge if activeList has entries
+      if (!chosen && activeList && activeList.length > 0) {
+        chosen = activeList[0];
+      }
+
+      if (chosen) {
         return {
-          id: data.id,
-          theme: data.theme,
-          date: new Date(data.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
-          brief: data.brief,
-          remaining: data.remaining || "6 h 24",
+          id: chosen.id,
+          theme: chosen.theme,
+          date: new Date(chosen.starts_at || chosen.date).toLocaleDateString("fr-FR", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+          }),
+          brief: chosen.brief,
+          remaining: chosen.remaining || "6 h 24",
+          starts_at: chosen.starts_at || chosen.created_at,
+          ends_at: chosen.ends_at || undefined,
+          status: chosen.status || (chosen.active ? "active" : "completed"),
+          created_at: chosen.created_at,
         };
       }
 
@@ -351,29 +397,82 @@ export async function fetchActiveChallenge(): Promise<ChallengeData | null> {
   return null;
 }
 
-export async function saveActiveChallenge(challenge: Partial<ChallengeData>) {
-  if (isSupabaseConfigured) {
-    const todayDateStr = new Date().toISOString().split("T")[0];
-
-    // Check if there is an existing challenge for today or an active one
-    const { data: existing } = await supabase
+export async function fetchAllChallengesList(): Promise<ChallengeData[]> {
+  if (!isSupabaseConfigured) return [];
+  try {
+    const { data, error } = await supabase
       .from("daily_challenges")
-      .select("id")
-      .or(`date.eq.${todayDateStr},active.eq.true`)
-      .limit(1)
-      .maybeSingle();
+      .select("*")
+      .order("starts_at", { ascending: false });
 
-    if (existing?.id) {
-      // UPDATE the existing row
+    if (error || !data) return [];
+
+    return data.map((d) => ({
+      id: d.id,
+      theme: d.theme,
+      date: new Date(d.starts_at || d.date).toLocaleDateString("fr-FR", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      }),
+      brief: d.brief,
+      remaining: d.remaining || "",
+      starts_at: d.starts_at || d.created_at,
+      ends_at: d.ends_at || undefined,
+      status: d.status || (d.active ? "active" : "completed"),
+      created_at: d.created_at,
+    }));
+  } catch (err) {
+    console.warn("fetchAllChallengesList error:", err);
+    return [];
+  }
+}
+
+export async function saveActiveChallenge(
+  challenge: Partial<ChallengeData>,
+  options?: {
+    isScheduled?: boolean;
+    startsAt?: string;
+    endsAt?: string;
+  }
+) {
+  if (isSupabaseConfigured) {
+    const isScheduled = options?.isScheduled ?? (challenge.status === "scheduled");
+    const startsAt = options?.startsAt || challenge.starts_at || new Date().toISOString();
+    
+    // Default ends_at = 24h after starts_at or end of day if not specified
+    let endsAt = options?.endsAt || challenge.ends_at;
+    if (!endsAt) {
+      const startDate = new Date(startsAt);
+      startDate.setHours(startDate.getHours() + 24);
+      endsAt = startDate.toISOString();
+    }
+
+    const todayDateStr = new Date(startsAt).toISOString().split("T")[0];
+    const challengeStatus = isScheduled ? "scheduled" : "active";
+
+    // If publishing an immediate active challenge, mark existing active ones as completed
+    if (!isScheduled) {
+      await supabase
+        .from("daily_challenges")
+        .update({ active: false, status: "completed" })
+        .eq("active", true);
+    }
+
+    if (challenge.id) {
+      // UPDATE existing challenge
       const { data, error: updateErr } = await supabase
         .from("daily_challenges")
         .update({
           theme: challenge.theme,
           brief: challenge.brief,
-          active: true,
+          active: !isScheduled,
+          status: challengeStatus,
+          starts_at: startsAt,
+          ends_at: endsAt,
           date: todayDateStr,
         })
-        .eq("id", existing.id)
+        .eq("id", challenge.id)
         .select()
         .single();
 
@@ -384,28 +483,75 @@ export async function saveActiveChallenge(challenge: Partial<ChallengeData>) {
 
       return data;
     } else {
-      // INSERT or UPSERT on conflict date
-      const { data, error: upsertErr } = await supabase
+      // INSERT new challenge
+      const { data, error: insertErr } = await supabase
         .from("daily_challenges")
-        .upsert(
-          {
-            theme: challenge.theme,
-            brief: challenge.brief,
-            date: todayDateStr,
-            active: true,
-          },
-          { onConflict: "date" }
-        )
+        .insert({
+          theme: challenge.theme,
+          brief: challenge.brief,
+          active: !isScheduled,
+          status: challengeStatus,
+          starts_at: startsAt,
+          ends_at: endsAt,
+          date: todayDateStr,
+        })
         .select()
         .single();
 
-      if (upsertErr) {
-        console.error("CRITICAL: Supabase upsert daily_challenges failed:", upsertErr);
-        throw new Error(upsertErr.message || "Écriture refusée par Supabase");
+      if (insertErr) {
+        console.error("CRITICAL: Supabase insert daily_challenges failed:", insertErr);
+        throw new Error(insertErr.message || "Écriture refusée par Supabase");
       }
 
       return data;
     }
+  }
+}
+
+export async function activateChallengeNow(challengeId: string | number) {
+  if (!isSupabaseConfigured) return;
+
+  // 1. Mark current active challenges as completed
+  await supabase
+    .from("daily_challenges")
+    .update({ active: false, status: "completed" })
+    .eq("active", true);
+
+  // 2. Fetch challenge target to compute new ends_at (24h from now)
+  const now = new Date();
+  const endsAt = new Date(now.getTime() + 24 * 3600 * 1000).toISOString();
+
+  // 3. Activate target challenge
+  const { data, error } = await supabase
+    .from("daily_challenges")
+    .update({
+      active: true,
+      status: "active",
+      starts_at: now.toISOString(),
+      ends_at: endsAt,
+    })
+    .eq("id", challengeId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("activateChallengeNow error:", error);
+    throw new Error(error.message || "Impossible d'activer ce défi");
+  }
+
+  return data;
+}
+
+export async function deleteChallenge(challengeId: string | number) {
+  if (!isSupabaseConfigured) return;
+  const { error } = await supabase
+    .from("daily_challenges")
+    .delete()
+    .eq("id", challengeId);
+
+  if (error) {
+    console.error("deleteChallenge error:", error);
+    throw new Error(error.message || "Impossible de supprimer ce défi");
   }
 }
 

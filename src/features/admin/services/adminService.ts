@@ -16,6 +16,9 @@ import {
   togglePinPost,
   updateFeedPost,
   uploadImage,
+  fetchAllChallengesList,
+  deleteChallenge,
+  activateChallengeNow,
 } from "@/lib/api";
 
 export {
@@ -30,6 +33,9 @@ export {
   saveActiveChallenge,
   saveMysteryItem,
   uploadImage,
+  fetchAllChallengesList,
+  deleteChallenge,
+  activateChallengeNow,
 };
 export type { AdminMetrics, AdminSquadSummary, ChallengeData, MysteryItemData };
 

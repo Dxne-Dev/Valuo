@@ -2,12 +2,17 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
   AlertTriangle,
+  CalendarPlus,
+  Clock,
   Edit3,
+  Layers,
   LayoutDashboard,
   MessageSquare,
   PackageOpen,
+  PauseCircle,
   Pin,
   PinOff,
+  Play,
   Plus,
   RefreshCw,
   Save,
@@ -15,6 +20,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Timer,
   Trash2,
   Trophy,
   Upload,
@@ -34,6 +40,9 @@ import {
   deleteSquadAdmin,
   fetchAdminMetrics,
   fetchAdminSquadsList,
+  fetchAllChallengesList,
+  deleteChallenge,
+  activateChallengeNow,
   type MysteryItemData,
   saveActiveChallenge,
   saveMysteryItem,
@@ -41,6 +50,24 @@ import {
   updateFeedPost,
   uploadImage,
 } from "../services/adminService";
+import { useCountdown } from "@/lib/useCountdown";
+
+function ChallengeCountdownBadge({ endsAt }: { endsAt?: string }) {
+  const countdown = useCountdown(endsAt);
+  if (countdown.isExpired) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2.5 py-0.5 text-[11px] font-bold text-red-600 border border-red-500/20">
+        Expiré (00:00:00)
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#173f35]/10 px-2.5 py-0.5 text-xs font-mono font-bold text-[#173f35]">
+      <Timer size={13} className="text-[#e9683a] animate-pulse" />
+      {countdown.formatted}
+    </span>
+  );
+}
 
 export type AdminViewProps = {
   currentUserId?: string | null;
@@ -100,21 +127,47 @@ export default function AdminView({
   const [squadsList, setSquadsList] = useState<AdminSquadSummary[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
 
+  // Multi-challenge state
+  const [challengesList, setChallengesList] = useState<ChallengeData[]>([]);
+  const [isSchedulingMode, setIsSchedulingMode] = useState(false);
+  const [durationPreset, setDurationPreset] = useState<"today" | "12h" | "24h" | "48h" | "custom">("today");
+  const [scheduleStartsAt, setScheduleStartsAt] = useState(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    return tomorrow.toISOString().slice(0, 16);
+  });
+  const [scheduleEndsAt, setScheduleEndsAt] = useState(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(23, 59, 59, 0);
+    return tomorrow.toISOString().slice(0, 16);
+  });
+  const [editingChallengeId, setEditingChallengeId] = useState<string | number | null>(null);
+  const [savingChallenge, setSavingChallenge] = useState(false);
+
   // Challenge form state
   const [theme, setTheme] = useState(activeChallenge?.theme || "Une touche de rouge");
   const [brief, setBrief] = useState(
     activeChallenge?.brief ||
       "Photographie un objet rouge qui a déjà vécu. Un détail, une texture, une histoire — avant minuit.",
   );
-  const [remaining, setRemaining] = useState(activeChallenge?.remaining || "6 h 24");
+
+  async function loadChallenges() {
+    const list = await fetchAllChallengesList();
+    setChallengesList(list);
+  }
 
   useEffect(() => {
-    if (activeChallenge) {
+    loadChallenges();
+  }, [activeChallenge?.id, tab]);
+
+  useEffect(() => {
+    if (activeChallenge && !editingChallengeId) {
       setTheme(activeChallenge.theme);
       setBrief(activeChallenge.brief);
-      setRemaining(activeChallenge.remaining || "6 h 24");
     }
-  }, [activeChallenge]);
+  }, [activeChallenge, editingChallengeId]);
 
   // Official & pinned posts list
   const officialPosts = posts.filter((p) => p.isOfficial || p.isPinned);
@@ -187,25 +240,135 @@ export default function AdminView({
     loadAdminData();
   }, [posts.length]);
 
-  // Handle Challenge
+  // Handle Challenge CRUD & Scheduling
+  function resetChallengeForm() {
+    setEditingChallengeId(null);
+    setTheme(activeChallenge?.theme || "");
+    setBrief(activeChallenge?.brief || "");
+    setIsSchedulingMode(false);
+    setDurationPreset("today");
+  }
+
+  function startEditingChallenge(c: ChallengeData) {
+    setEditingChallengeId(c.id || null);
+    setTheme(c.theme);
+    setBrief(c.brief);
+    setIsSchedulingMode(c.status === "scheduled");
+    if (c.starts_at) {
+      setScheduleStartsAt(new Date(c.starts_at).toISOString().slice(0, 16));
+    }
+    if (c.ends_at) {
+      setScheduleEndsAt(new Date(c.ends_at).toISOString().slice(0, 16));
+      setDurationPreset("custom");
+    }
+    window.scrollTo({ top: 350, behavior: "smooth" });
+    onNotice(`Modification du défi « ${c.theme} »`);
+  }
+
   async function handleSaveChallenge(event: FormEvent) {
     event.preventDefault();
     if (!theme.trim()) return;
 
-    const updated: ChallengeData = {
-      theme: theme.trim(),
-      brief: brief.trim(),
-      remaining: remaining.trim() || "6 h 24",
-      date: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
-    };
-
+    setSavingChallenge(true);
     try {
-      await saveActiveChallenge(updated);
-      onChallengeUpdated(updated);
-      onNotice("Défi du jour publié avec succès sur le feed.");
+      let startsAtIso: string;
+      let endsAtIso: string;
+
+      if (isSchedulingMode) {
+        startsAtIso = new Date(scheduleStartsAt).toISOString();
+        endsAtIso = new Date(scheduleEndsAt).toISOString();
+      } else {
+        const now = new Date();
+        startsAtIso = now.toISOString();
+
+        if (durationPreset === "today") {
+          const endOfDay = new Date();
+          endOfDay.setHours(23, 59, 59, 999);
+          endsAtIso = endOfDay.toISOString();
+        } else if (durationPreset === "12h") {
+          endsAtIso = new Date(now.getTime() + 12 * 3600 * 1000).toISOString();
+        } else if (durationPreset === "24h") {
+          endsAtIso = new Date(now.getTime() + 24 * 3600 * 1000).toISOString();
+        } else if (durationPreset === "48h") {
+          endsAtIso = new Date(now.getTime() + 48 * 3600 * 1000).toISOString();
+        } else {
+          endsAtIso = new Date(scheduleEndsAt).toISOString();
+        }
+      }
+
+      const challengePayload: Partial<ChallengeData> = {
+        id: editingChallengeId || undefined,
+        theme: theme.trim(),
+        brief: brief.trim(),
+        status: isSchedulingMode ? "scheduled" : "active",
+        starts_at: startsAtIso,
+        ends_at: endsAtIso,
+      };
+
+      const saved = await saveActiveChallenge(challengePayload, {
+        isScheduled: isSchedulingMode,
+        startsAt: startsAtIso,
+        endsAt: endsAtIso,
+      });
+
+      if (!isSchedulingMode) {
+        onChallengeUpdated({
+          id: saved?.id || editingChallengeId || Date.now(),
+          theme: theme.trim(),
+          brief: brief.trim(),
+          date: new Date(startsAtIso).toLocaleDateString("fr-FR", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+          }),
+          starts_at: startsAtIso,
+          ends_at: endsAtIso,
+          status: "active",
+        });
+      }
+
+      await loadChallenges();
+      resetChallengeForm();
+      onNotice(isSchedulingMode ? "Défi programmé avec succès !" : "Défi publié et actif immédiatement sur le feed !");
     } catch (err: any) {
       console.error("Save challenge failed:", err);
-      onNotice(`Erreur lors de la publication : ${err.message || "écriture refusée par Supabase"}`);
+      onNotice(`Erreur : ${err.message || "écriture refusée par Supabase"}`);
+    } finally {
+      setSavingChallenge(false);
+    }
+  }
+
+  async function handleActivateChallenge(challengeId: string | number) {
+    try {
+      const activated = await activateChallengeNow(challengeId);
+      if (activated) {
+        onChallengeUpdated({
+          id: activated.id,
+          theme: activated.theme,
+          brief: activated.brief,
+          date: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
+          starts_at: activated.starts_at,
+          ends_at: activated.ends_at,
+          status: "active",
+        });
+      }
+      await loadChallenges();
+      onNotice("Défi activé immédiatement en direct sur le feed !");
+    } catch (err: any) {
+      onNotice(`Erreur : ${err.message || "activation impossible"}`);
+    }
+  }
+
+  async function handleDeleteChallengeItem(challengeId: string | number) {
+    try {
+      await deleteChallenge(challengeId);
+      if (activeChallenge?.id === challengeId) {
+        onChallengeUpdated(null);
+      }
+      await loadChallenges();
+      onNotice("Défi supprimé avec succès.");
+    } catch (err: any) {
+      onNotice(`Erreur : ${err.message || "suppression impossible"}`);
     }
   }
 
@@ -213,6 +376,7 @@ export default function AdminView({
     try {
       await deactivateActiveChallenge();
       onChallengeUpdated(null);
+      await loadChallenges();
       onNotice("Défi du jour retiré du feed.");
     } catch (err: any) {
       console.error("Deactivate challenge failed:", err);
@@ -588,34 +752,120 @@ export default function AdminView({
         </motion.div>
       )}
 
-      {/* TAB 1: DÉFI DU JOUR */}
+      {/* TAB 1: DÉFI DU JOUR & PROGRAMMATION MULTI-DÉFIS */}
       {tab === "challenge" && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          <div className="rounded-[28px] bg-white p-6 sm:p-8 shadow-sm border border-[#173f35]/8">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#e9683a]">
-              <Sparkles size={16} /> Configuration du Défi Quotidien
-            </div>
-            <h2 className="mt-1 font-display text-2xl font-semibold text-[#173f35]">Modifier le thème et le brief</h2>
-            <p className="mt-1 text-xs text-[#6f7e76]">
-              Ce défi sera immédiatement visible dans l'en-tête du feed pour tous les joueurs.
-            </p>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+          {/* 1. CARTE DU DÉFI ACTUELLEMENT EN COURS */}
+          {activeChallenge ? (
+            <div className="overflow-hidden rounded-[28px] border-2 border-emerald-500/30 bg-gradient-to-br from-emerald-50/50 via-white to-[#fbf8f1] p-6 sm:p-7 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping" />
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-800">
+                    Défi Actuellement en Ligne sur le Feed
+                  </span>
+                </div>
+                <ChallengeCountdownBadge endsAt={activeChallenge.ends_at} />
+              </div>
 
-            <form onSubmit={handleSaveChallenge} className="mt-6 space-y-4">
+              <div className="mt-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-display text-2xl sm:text-3xl font-bold text-[#173f35]">
+                    {activeChallenge.theme}
+                  </h3>
+                  <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-[#53655b]">
+                    {activeChallenge.brief}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startEditingChallenge(activeChallenge)}
+                    className="flex items-center gap-1.5 rounded-full border border-[#173f35]/15 bg-white px-4 py-2.5 text-xs font-bold text-[#173f35] shadow-sm transition hover:bg-[#fbf8f1]"
+                  >
+                    <Edit3 size={14} /> Modifier
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeactivateChallenge}
+                    className="flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-bold text-red-600 transition hover:bg-red-100"
+                  >
+                    <PauseCircle size={14} /> Retirer du feed
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-[28px] border border-dashed border-[#173f35]/20 bg-[#fbf8f1] p-6 text-center">
+              <Sparkles size={24} className="mx-auto text-[#e9683a]" />
+              <p className="mt-2 font-display text-lg font-bold text-[#173f35]">Aucun défi en direct actuellement</p>
+              <p className="mt-1 text-xs text-[#6e7d75]">
+                Publiez un nouveau défi ci-dessous pour lancer la session de jeu sur le feed.
+              </p>
+            </div>
+          )}
+
+          {/* 2. FORMULAIRE DE CRÉATION & PROGRAMMATION */}
+          <div className="rounded-[28px] bg-white p-6 sm:p-8 shadow-sm border border-[#173f35]/8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Thème du jour</label>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#e9683a]">
+                  <Sparkles size={16} /> {editingChallengeId ? "Modifier le Défi" : "Créer / Programmer un Défi"}
+                </div>
+                <h2 className="mt-1 font-display text-2xl font-semibold text-[#173f35]">
+                  {editingChallengeId ? "Modifier les paramètres du défi" : "Lancer ou planifier un défi photo"}
+                </h2>
+              </div>
+
+              {/* Toggle Mode: Immédiat vs Programmer */}
+              <div className="flex items-center rounded-2xl bg-[#f5f0e5] p-1.5 border border-[#173f35]/8">
+                <button
+                  type="button"
+                  onClick={() => setIsSchedulingMode(false)}
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    !isSchedulingMode
+                      ? "bg-[#173f35] text-white shadow-sm"
+                      : "text-[#53655b] hover:text-[#173f35]"
+                  }`}
+                >
+                  <Play size={13} /> Publier maintenant
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSchedulingMode(true)}
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    isSchedulingMode
+                      ? "bg-[#e9683a] text-white shadow-sm"
+                      : "text-[#53655b] hover:text-[#173f35]"
+                  }`}
+                >
+                  <CalendarPlus size={13} /> Programmer futur
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveChallenge} className="mt-6 space-y-5">
+              <div>
+                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
+                  Thème du défi
+                </label>
                 <input
                   type="text"
+                  required
                   value={theme}
                   onChange={(e) => setTheme(e.target.value)}
-                  placeholder="Ex: Une touche de rouge, Minimalisme urbain, Reflets…"
+                  placeholder="Ex: Une touche de rouge, Reflets urbains, Objets vintage…"
                   className="mt-1.5 w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] px-4 py-3.5 text-sm font-bold text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Brief & Consignes du Game Master</label>
+                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
+                  Brief & Consignes du Game Master
+                </label>
                 <textarea
                   rows={3}
+                  required
                   value={brief}
                   onChange={(e) => setBrief(e.target.value)}
                   placeholder="Ex: Photographie un objet rouge qui a déjà vécu. Un détail, une texture, une histoire — avant minuit."
@@ -623,35 +873,181 @@ export default function AdminView({
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Temps restant indicatif</label>
-                <input
-                  type="text"
-                  value={remaining}
-                  onChange={(e) => setRemaining(e.target.value)}
-                  placeholder="Ex: 6 h 24, Fin à 23h59"
-                  className="mt-1.5 w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] px-4 py-3 text-sm text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
-                />
-              </div>
+              {/* DURATION / SCHEDULING CONTROLS */}
+              {!isSchedulingMode ? (
+                <div>
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
+                    Durée du défi (Compte à rebours)
+                  </label>
+                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {[
+                      { id: "today", label: "Fin à 23h59" },
+                      { id: "12h", label: "12 Heures" },
+                      { id: "24h", label: "24 Heures" },
+                      { id: "48h", label: "48 Heures" },
+                      { id: "custom", label: "Personnalisé" },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setDurationPreset(item.id as any)}
+                        className={`rounded-xl border py-2.5 px-3 text-xs font-bold transition ${
+                          durationPreset === item.id
+                            ? "border-[#173f35] bg-[#173f35] text-white shadow-sm"
+                            : "border-[#173f35]/10 bg-[#fbf8f1] text-[#53655b] hover:bg-white"
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
 
-              <div className="mt-6 flex flex-wrap items-center gap-3">
+                  {durationPreset === "custom" && (
+                    <div className="mt-3">
+                      <label className="text-[11px] font-bold text-[#6e7d75]">Date et Heure de fin</label>
+                      <input
+                        type="datetime-local"
+                        value={scheduleEndsAt}
+                        onChange={(e) => setScheduleEndsAt(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-[#173f35]/15 bg-[#fbf8f1] px-4 py-2.5 text-xs font-bold text-[#173f35]"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="grid sm:grid-cols-2 gap-4 rounded-2xl bg-[#fbf8f1] p-4 border border-[#173f35]/8">
+                  <div>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
+                      Date & Heure de Début
+                    </label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={scheduleStartsAt}
+                      onChange={(e) => setScheduleStartsAt(e.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-[#173f35]/15 bg-white px-4 py-3 text-xs font-bold text-[#173f35] outline-none focus:border-[#e9683a]"
+                    />
+                    <p className="mt-1 text-[10px] text-[#6e7d75]">Le défi s'activera automatiquement à ce moment.</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
+                      Date & Heure de Fin
+                    </label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={scheduleEndsAt}
+                      onChange={(e) => setScheduleEndsAt(e.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-[#173f35]/15 bg-white px-4 py-3 text-xs font-bold text-[#173f35] outline-none focus:border-[#e9683a]"
+                    />
+                    <p className="mt-1 text-[10px] text-[#6e7d75]">Les uploads seront clos à cette date/heure.</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-wrap items-center gap-3 pt-2">
                 <button
                   type="submit"
-                  className="flex items-center gap-2 rounded-full bg-[#173f35] px-6 py-3.5 text-xs font-extrabold text-white transition hover:bg-[#23584b] shadow-lg shadow-[#173f35]/20"
+                  disabled={savingChallenge}
+                  className="flex items-center gap-2 rounded-full bg-[#173f35] px-6 py-3.5 text-xs font-extrabold text-white transition hover:bg-[#23584b] shadow-lg shadow-[#173f35]/20 disabled:opacity-50"
                 >
-                  <Save size={16} /> Enregistrer et publier le défi
+                  {savingChallenge ? (
+                    <RefreshCw size={15} className="animate-spin" />
+                  ) : isSchedulingMode ? (
+                    <CalendarPlus size={15} />
+                  ) : (
+                    <Save size={15} />
+                  )}
+                  {editingChallengeId
+                    ? "Mettre à jour le défi"
+                    : isSchedulingMode
+                    ? "Planifier ce défi dans la file d'attente"
+                    : "Enregistrer et publier immédiatement"}
                 </button>
-                {activeChallenge && (
+
+                {editingChallengeId && (
                   <button
                     type="button"
-                    onClick={handleDeactivateChallenge}
-                    className="flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-5 py-3.5 text-xs font-extrabold text-red-600 transition hover:bg-red-100"
+                    onClick={resetChallengeForm}
+                    className="rounded-full border border-[#173f35]/15 bg-white px-5 py-3.5 text-xs font-bold text-[#53655b] hover:bg-[#fbf8f1]"
                   >
-                    <Trash2 size={15} /> Retirer le défi du feed
+                    Annuler la modification
                   </button>
                 )}
               </div>
             </form>
+          </div>
+
+          {/* 3. FILE D'ATTENTE DES DÉFIS PROGRAMMÉS */}
+          <div className="rounded-[28px] bg-white p-6 sm:p-8 shadow-sm border border-[#173f35]/8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#488262]">
+                <Layers size={16} /> File d'attente des Défis Programmés
+              </div>
+              <span className="rounded-full bg-[#173f35]/10 px-3 py-1 text-xs font-bold text-[#173f35]">
+                {challengesList.filter((c) => c.status === "scheduled").length} programmé(s)
+              </span>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {challengesList.filter((c) => c.status === "scheduled").length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[#173f35]/15 bg-[#fbf8f1] p-6 text-center">
+                  <Clock size={20} className="mx-auto text-[#8a958f]" />
+                  <p className="mt-2 text-xs font-bold text-[#53655b]">Aucun défi en file d'attente pour le moment</p>
+                  <p className="mt-1 text-[11px] text-[#8a958f]">
+                    Utilisez l'option « Programmer futur » ci-dessus pour planifier les défis des prochains jours.
+                  </p>
+                </div>
+              ) : (
+                challengesList
+                  .filter((c) => c.status === "scheduled")
+                  .map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-amber-200/60 bg-amber-50/40 p-4 transition hover:bg-amber-50"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-amber-200/80 px-2.5 py-0.5 text-[10px] font-extrabold text-amber-900 uppercase">
+                            📅 Programmé
+                          </span>
+                          <span className="text-xs font-bold text-[#53655b]">
+                            Du {new Date(c.starts_at || "").toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} au {new Date(c.ends_at || "").toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                        <h4 className="mt-1.5 text-base font-bold text-[#173f35]">{c.theme}</h4>
+                        <p className="text-xs text-[#53655b] line-clamp-1">{c.brief}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => c.id && handleActivateChallenge(c.id)}
+                          className="flex items-center gap-1 rounded-full bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 shadow-sm"
+                        >
+                          <Play size={12} /> Activer maintenant
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startEditingChallenge(c)}
+                          className="rounded-full border border-[#173f35]/15 bg-white p-2 text-[#173f35] hover:bg-[#fbf8f1]"
+                          title="Modifier"
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => c.id && handleDeleteChallengeItem(c.id)}
+                          className="rounded-full border border-red-200 bg-white p-2 text-red-600 hover:bg-red-50"
+                          title="Supprimer"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
           </div>
         </motion.div>
       )}

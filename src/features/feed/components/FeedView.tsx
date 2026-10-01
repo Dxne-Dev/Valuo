@@ -2,12 +2,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Camera,
   Check,
-  Clock3,
   Edit3,
   Flag,
   Flame,
   Heart,
   Loader2,
+  Lock,
   MapPin,
   MessageCircle,
   MoreHorizontal,
@@ -17,6 +17,7 @@ import {
   Send,
   Share2,
   Sparkles,
+  Timer,
   Trash2,
   Upload,
   UserPlus,
@@ -26,6 +27,7 @@ import {
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from "react";
 import { type FeedPost, type UserProfile } from "@/data";
 import { type ChallengeData } from "../services/feedService";
+import { useCountdown } from "@/lib/useCountdown";
 
 export type FeedFilter = "recents" | "friends" | "popular";
 
@@ -81,6 +83,19 @@ export default function FeedView({
 
   const isAdmin = Boolean(currentUser.isAdmin || currentUser.name === "Dxne - Admin");
 
+  // Dynamic live countdown
+  const countdown = useCountdown(challenge?.ends_at);
+  const isChallengeExpired = Boolean(challenge && countdown.isExpired);
+  const isUploadBlocked = isChallengeExpired && !isAdmin;
+
+  function handleTriggerComposer() {
+    if (isUploadBlocked) {
+      setActionNotice("Le défi du jour est clos. Les uploads sont temporairement verrouillés.");
+      return;
+    }
+    onOpenComposer();
+  }
+
   // Close menus on outside click
   useEffect(() => {
     function handleClickOutside() {
@@ -93,7 +108,7 @@ export default function FeedView({
   // Notice auto dismiss
   useEffect(() => {
     if (!actionNotice) return;
-    const timer = setTimeout(() => setActionNotice(""), 3000);
+    const timer = setTimeout(() => setActionNotice(""), 3500);
     return () => clearTimeout(timer);
   }, [actionNotice]);
 
@@ -178,47 +193,91 @@ export default function FeedView({
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }} className="mx-auto max-w-[680px]">
       {challenge && (
-        <section className="relative overflow-hidden rounded-[28px] bg-[#173f35] text-white">
-          <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#e9683a]/25 blur-2xl" />
+        <section className={`relative overflow-hidden rounded-[28px] transition-all duration-300 text-white ${
+          isChallengeExpired ? "bg-[#2d1b18] border-2 border-red-500/30" : "bg-[#173f35]"
+        }`}>
+          <div className={`pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full blur-2xl ${
+            isChallengeExpired ? "bg-red-500/20" : "bg-[#e9683a]/25"
+          }`} />
           <div className="pointer-events-none absolute -bottom-20 left-10 h-40 w-40 rounded-full bg-[#f3c969]/20 blur-2xl" />
+          
           <div className="relative p-5 sm:p-7">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#f3c969]">
-                <Sparkles size={14} /> Défi photo du jour
+              <div className={`flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.18em] ${
+                isChallengeExpired ? "text-red-400" : "text-[#f3c969]"
+              }`}>
+                <Sparkles size={14} /> {isChallengeExpired ? "Défi clos · En attente du prochain" : "Défi photo du jour"}
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold text-white/80">
-                <Clock3 size={13} /> {challenge.remaining} restantes
-              </span>
+
+              {/* Dynamic Live Timer Badge */}
+              <div className="flex items-center gap-2">
+                {isChallengeExpired ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/20 px-3 py-1 text-[11px] font-extrabold text-red-300 border border-red-500/30">
+                    <Lock size={12} /> Défi Expiré (00:00:00)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-mono font-black text-[#f3c969] border border-white/15 shadow-inner backdrop-blur-md">
+                    <Timer size={14} className="animate-pulse text-[#e9683a]" />
+                    <span>{countdown.formatted}</span>
+                    <span className="text-[10px] font-sans font-bold text-white/70">restantes</span>
+                  </span>
+                )}
+                {isAdmin && (
+                  <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] font-extrabold text-amber-300 border border-amber-400/30">
+                    Admin
+                  </span>
+                )}
+              </div>
             </div>
+
             <p className="mt-4 font-display text-[34px] font-semibold leading-[0.95] tracking-[-0.04em] sm:text-5xl">
               {challenge.theme}
             </p>
             <p className="mt-3 max-w-md text-sm leading-relaxed text-white/70">{challenge.brief}</p>
+            
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={onOpenComposer}
-                className="inline-flex items-center gap-2 rounded-full bg-[#f3c969] px-5 py-3 text-sm font-extrabold text-[#173f35] transition hover:-translate-y-0.5 hover:bg-white"
-              >
-                <Camera size={16} /> Poster ma photo
-              </button>
-              <p className="text-xs font-semibold text-white/55">{posts.filter((p) => !p.isPinned).length} photos de joueurs aujourd'hui</p>
+              {isUploadBlocked ? (
+                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-3 text-xs font-bold text-white/60 border border-white/10">
+                  <Lock size={15} /> Upload verrouillé (défi terminé)
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleTriggerComposer}
+                  className="inline-flex items-center gap-2 rounded-full bg-[#f3c969] px-5 py-3 text-sm font-extrabold text-[#173f35] transition hover:-translate-y-0.5 hover:bg-white shadow-lg shadow-black/10"
+                >
+                  <Camera size={16} /> Poster ma photo {isChallengeExpired && isAdmin && "(Admin)"}
+                </button>
+              )}
+              <p className="text-xs font-semibold text-white/55">{posts.filter((p) => !p.isPinned).length} photos de joueurs</p>
             </div>
           </div>
         </section>
       )}
 
-      <div className={`${challenge ? "mt-4" : "mt-1"} overflow-hidden rounded-[24px] border border-[#173f35]/8 bg-white`}>
+      {/* COMPOSER TRIGGER BAR */}
+      <div className={`${challenge ? "mt-4" : "mt-1"} overflow-hidden rounded-[24px] border border-[#173f35]/8 bg-white transition`}>
         <button
           type="button"
-          onClick={onOpenComposer}
-          className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-[#fbf8f1]"
+          onClick={handleTriggerComposer}
+          className={`flex w-full items-center gap-3 px-4 py-3.5 text-left transition ${
+            isUploadBlocked ? "cursor-not-allowed opacity-75 hover:bg-white" : "hover:bg-[#fbf8f1]"
+          }`}
         >
           <img src={currentUser.avatar} alt="" className="h-10 w-10 rounded-full object-cover" />
-          <span className="flex-1 rounded-full bg-[#f5f0e5] px-4 py-2.5 text-sm text-[#8a958f]">
-            {challenge ? "Partage ta photo du défi…" : "Partage une photo dans le feed…"}
+          <span className="flex-1 flex items-center justify-between rounded-full bg-[#f5f0e5] px-4 py-2.5 text-sm text-[#8a958f]">
+            <span>
+              {isUploadBlocked 
+                ? "Le défi du jour est clos · En attente du prochain défi" 
+                : (challenge ? "Partage ta photo du défi…" : "Partage une photo dans le feed…")}
+            </span>
+            {isUploadBlocked && <Lock size={14} className="text-[#8a958f]" />}
           </span>
-          <span className="hidden rounded-full bg-[#173f35] px-3 py-2 text-xs font-extrabold text-white sm:inline">Publier</span>
+          <span className={`hidden rounded-full px-3 py-2 text-xs font-extrabold sm:inline ${
+            isUploadBlocked ? "bg-[#8a958f]/20 text-[#8a958f]" : "bg-[#173f35] text-white"
+          }`}>
+            {isUploadBlocked ? "Verrouillé" : "Publier"}
+          </span>
         </button>
       </div>
 

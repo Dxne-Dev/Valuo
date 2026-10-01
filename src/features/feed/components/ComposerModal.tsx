@@ -1,20 +1,33 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, ImagePlus, Loader2, Sparkles, X } from "lucide-react";
+import { Camera, ImagePlus, Loader2, Lock, Sparkles, X } from "lucide-react";
 import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 import { media } from "@/data";
-import { uploadImage } from "../services/feedService";
+import { uploadImage, type ChallengeData } from "../services/feedService";
+import { useCountdown } from "@/lib/useCountdown";
 
 export type ComposerModalProps = {
   open: boolean;
   onClose: () => void;
   onPublish: (photo: string, caption: string) => void;
+  challenge?: ChallengeData | null;
+  isAdmin?: boolean;
 };
 
-export default function ComposerModal({ open, onClose, onPublish }: ComposerModalProps) {
+export default function ComposerModal({
+  open,
+  onClose,
+  onPublish,
+  challenge,
+  isAdmin = false,
+}: ComposerModalProps) {
   const [photo, setPhoto] = useState("");
   const [fileObject, setFileObject] = useState<File | null>(null);
   const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
+
+  const countdown = useCountdown(challenge?.ends_at);
+  const isExpired = Boolean(challenge && countdown.isExpired);
+  const isBlocked = isExpired && !isAdmin;
 
   useEffect(() => {
     if (!open) {
@@ -26,6 +39,7 @@ export default function ComposerModal({ open, onClose, onPublish }: ComposerModa
   }, [open]);
 
   function chooseFile(event: ChangeEvent<HTMLInputElement>) {
+    if (isBlocked) return;
     const file = event.target.files?.[0];
     if (!file) return;
     setFileObject(file);
@@ -36,7 +50,7 @@ export default function ComposerModal({ open, onClose, onPublish }: ComposerModa
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!photo) return;
+    if (!photo || isBlocked) return;
 
     setUploading(true);
     let finalPhotoUrl = photo;
@@ -49,7 +63,10 @@ export default function ComposerModal({ open, onClose, onPublish }: ComposerModa
     }
 
     setUploading(false);
-    onPublish(finalPhotoUrl, caption || "Ma photo pour le défi du jour : une touche de rouge.");
+    onPublish(
+      finalPhotoUrl,
+      caption || `Ma photo pour le défi : ${challenge?.theme || "du jour"}.`
+    );
   }
 
   return (
@@ -76,10 +93,10 @@ export default function ComposerModal({ open, onClose, onPublish }: ComposerModa
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#e9683a]">
-                  Défi du jour
+                  {isExpired ? "Défi Terminé" : "Défi du jour"}
                 </p>
                 <h2 className="mt-1 font-display text-2xl font-semibold text-[#173f35]">
-                  Une touche de rouge
+                  {challenge?.theme || "Défi photo"}
                 </h2>
               </div>
               <button
@@ -91,6 +108,13 @@ export default function ComposerModal({ open, onClose, onPublish }: ComposerModa
                 <X size={18} />
               </button>
             </div>
+
+            {isBlocked && (
+              <div className="mt-4 flex items-center gap-2 rounded-2xl bg-red-50 p-3.5 text-xs font-bold text-red-600 border border-red-200">
+                <Lock size={16} className="shrink-0" />
+                <span>Le temps imparti pour ce défi est écoulé. Les publications sont verrouillées.</span>
+              </div>
+            )}
 
             <form onSubmit={submit} className="mt-6">
               {photo ? (
