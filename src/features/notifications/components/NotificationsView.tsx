@@ -2,6 +2,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
   CheckCheck,
+  ChevronLeft,
+  ChevronRight,
   CornerDownRight,
   Heart,
   MessageCircle,
@@ -11,7 +13,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { type AppNotification, type NotificationType } from "@/data";
 
 export type NotificationsViewProps = {
@@ -21,7 +23,7 @@ export type NotificationsViewProps = {
   onClearAll?: () => void;
 };
 
-export type NotifFilter = "all" | "unread" | "social" | "squad" | "game";
+export type NotifFilter = "all" | "unread" | "squad" | "social" | "game";
 
 export default function NotificationsView({
   notifications,
@@ -29,6 +31,10 @@ export default function NotificationsView({
   onNotificationClick,
 }: NotificationsViewProps) {
   const [filter, setFilter] = useState<NotifFilter>("all");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeftVal, setScrollLeftVal] = useState(0);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -39,6 +45,49 @@ export default function NotificationsView({
     if (filter === "game") return notifications.filter((n) => ["challenge", "mystery", "admin", "system"].includes(n.type));
     return notifications;
   }, [filter, notifications]);
+
+  // Drag-to-scroll for mouse / desktop emulation
+  function handleMouseDown(e: React.MouseEvent) {
+    if (!scrollRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - scrollRef.current.offsetLeft);
+    setScrollLeftVal(scrollRef.current.scrollLeft);
+  }
+
+  function handleMouseLeave() {
+    setIsDragging(false);
+  }
+
+  function handleMouseUp() {
+    setIsDragging(false);
+  }
+
+  function handleMouseMove(e: React.MouseEvent) {
+    if (!isDragging || !scrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollRef.current.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    scrollRef.current.scrollLeft = scrollLeftVal - walk;
+  }
+
+  function handleWheel(e: React.WheelEvent) {
+    if (!scrollRef.current) return;
+    if (Math.abs(e.deltaX) > 0) return;
+    if (Math.abs(e.deltaY) > 0) {
+      scrollRef.current.scrollLeft += e.deltaY;
+    }
+  }
+
+  function scrollByAmount(amount: number) {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: amount, behavior: "smooth" });
+    }
+  }
+
+  function handleTabClick(tabId: NotifFilter, e: React.MouseEvent<HTMLButtonElement>) {
+    setFilter(tabId);
+    e.currentTarget.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }
 
   function getIcon(type: NotificationType) {
     switch (type) {
@@ -116,9 +165,31 @@ export default function NotificationsView({
         )}
       </div>
 
-      {/* Filtres */}
-      <div className="mb-6 w-full overflow-hidden">
-        <div className="flex w-full items-center gap-1.5 overflow-x-auto no-scrollbar scrollbar-none rounded-2xl bg-[#eee8dc] p-1.5 flex-nowrap touch-pan-x">
+      {/* Filtres avec support scroll tactile & souris fluide */}
+      <div className="relative mb-6 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => scrollByAmount(-150)}
+          aria-label="Filtres précédents"
+          className="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#eee8dc] text-[#173f35]/70 hover:bg-[#e2dacb] hover:text-[#173f35] transition"
+        >
+          <ChevronLeft size={16} />
+        </button>
+
+        <div
+          ref={scrollRef}
+          onMouseDown={handleMouseDown}
+          onMouseLeave={handleMouseLeave}
+          onMouseUp={handleMouseUp}
+          onMouseMove={handleMouseMove}
+          onWheel={handleWheel}
+          className="flex flex-1 items-center gap-1.5 overflow-x-scroll no-scrollbar rounded-2xl bg-[#eee8dc] p-1.5 flex-nowrap cursor-grab active:cursor-grabbing select-none"
+          style={{
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+          }}
+        >
           {[
             { id: "all" as const, label: "Toutes" },
             { id: "unread" as const, label: `Non lues (${unreadCount})` },
@@ -129,8 +200,8 @@ export default function NotificationsView({
             <button
               key={tab.id}
               type="button"
-              onClick={() => setFilter(tab.id)}
-              className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold transition whitespace-nowrap active:scale-95 ${
+              onClick={(e) => handleTabClick(tab.id, e)}
+              className={`shrink-0 rounded-xl px-4 py-2.5 text-xs font-extrabold transition whitespace-nowrap active:scale-95 ${
                 filter === tab.id
                   ? "bg-white text-[#173f35] shadow-sm"
                   : "text-[#76837c] hover:text-[#173f35]"
@@ -140,6 +211,15 @@ export default function NotificationsView({
             </button>
           ))}
         </div>
+
+        <button
+          type="button"
+          onClick={() => scrollByAmount(150)}
+          aria-label="Filtres suivants"
+          className="hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#eee8dc] text-[#173f35]/70 hover:bg-[#e2dacb] hover:text-[#173f35] transition"
+        >
+          <ChevronRight size={16} />
+        </button>
       </div>
 
       {/* Liste des notifications */}
