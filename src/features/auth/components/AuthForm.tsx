@@ -32,7 +32,7 @@ export default function AuthForm({ onSuccess, onDemoLogin }: AuthFormProps) {
       } else {
         setMessage({
           type: "success",
-          text: "Un mot de passe temporaire a été envoyé à votre adresse email.",
+          text: "Un email de confirmation et d'activation a été envoyé. Pensez à vérifier vos spams si besoin.",
         });
         setTab("login");
       }

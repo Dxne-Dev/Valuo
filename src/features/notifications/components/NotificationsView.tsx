@@ -117,27 +117,29 @@ export default function NotificationsView({
       </div>
 
       {/* Filtres */}
-      <div className="mb-6 flex gap-1.5 overflow-x-auto rounded-2xl bg-[#eee8dc] p-1">
-        {[
-          { id: "all" as const, label: "Toutes" },
-          { id: "unread" as const, label: `Non lues (${unreadCount})` },
-          { id: "squad" as const, label: "Escouade" },
-          { id: "social" as const, label: "Social & Réponses" },
-          { id: "game" as const, label: "Défis & Jeu" },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setFilter(tab.id)}
-            className={`rounded-xl px-4 py-2 text-xs font-bold transition whitespace-nowrap ${
-              filter === tab.id
-                ? "bg-white text-[#173f35] shadow-sm"
-                : "text-[#76837c] hover:text-[#173f35]"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="mb-6 w-full overflow-hidden">
+        <div className="flex w-full items-center gap-1.5 overflow-x-auto no-scrollbar scrollbar-none rounded-2xl bg-[#eee8dc] p-1.5 flex-nowrap touch-pan-x">
+          {[
+            { id: "all" as const, label: "Toutes" },
+            { id: "unread" as const, label: `Non lues (${unreadCount})` },
+            { id: "squad" as const, label: "Escouade" },
+            { id: "social" as const, label: "Social & Réponses" },
+            { id: "game" as const, label: "Défis & Jeu" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setFilter(tab.id)}
+              className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold transition whitespace-nowrap active:scale-95 ${
+                filter === tab.id
+                  ? "bg-white text-[#173f35] shadow-sm"
+                  : "text-[#76837c] hover:text-[#173f35]"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Liste des notifications */}

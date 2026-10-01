@@ -525,16 +525,16 @@ export default function OnboardingView({ initialIdentifier, onComplete, onInstal
                 Définis ton mot de passe
               </h2>
               <p className="mt-1 text-sm text-[#6f7e76]">
-                Remplace le mot de passe temporaire par ton mot de passe personnel pour sécuriser ton compte.
+                Choisis un mot de passe personnel pour sécuriser ton compte et te reconnecter facilement.
               </p>
             </div>
 
             <div className="mt-5 rounded-2xl bg-[#f5f0e5] p-4 text-xs leading-relaxed text-[#506158] border border-[#173f35]/8">
               <p className="font-bold text-[#173f35] flex items-center gap-1.5">
-                <ShieldCheck size={16} className="text-[#488262]" /> Pourquoi cette étape ?
+                <ShieldCheck size={16} className="text-[#488262]" /> Sécurise ton accès
               </p>
               <p className="mt-1">
-                Le mot de passe temporaire reçu par email expire dans <strong className="text-[#e9683a]">24 heures</strong>. Choisis ton mot de passe dès maintenant pour sécuriser ton accès.
+                Définis un mot de passe robuste (au moins 8 caractères) pour protéger ton compte et pouvoir te connecter sur tous tes appareils.
               </p>
             </div>
 

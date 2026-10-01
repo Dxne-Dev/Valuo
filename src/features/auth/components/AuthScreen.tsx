@@ -206,24 +206,34 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                 </h2>
 
                 <p className="mx-auto mt-3 max-w-md text-xs sm:text-sm leading-relaxed text-[#4f6057]">
-                  Un email de confirmation a été envoyé à <strong className="text-[#173f35]">{email}</strong> pour vérifier ton compte.
+                  Un email de confirmation et d'activation a été envoyé à <strong className="text-[#173f35]">{email}</strong>.
                 </p>
 
                 <div className="mx-auto mt-5 max-w-md rounded-2xl bg-white p-4 text-left border border-[#173f35]/10 shadow-sm">
                   <p className="text-xs font-bold text-[#173f35] flex items-center gap-1.5">
-                    <Sparkles size={14} className="text-[#e9683a]" /> Contenu de ton email :
+                    <Sparkles size={14} className="text-[#e9683a]" /> Dans ton email :
                   </p>
                   <ul className="mt-2 space-y-1.5 text-xs text-[#6e7c74]">
                     <li className="flex items-center gap-2">
                       <Check size={14} className="text-[#488262]" /> Message de bienvenue officiel VALUO
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check size={14} className="text-[#488262]" /> Ton mot de passe temporaire sécurisé (expire dans 24h)
+                      <Check size={14} className="text-[#488262]" /> Lien de confirmation & activation directe
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check size={14} className="text-[#488262]" /> Bouton d'activation directe
+                      <Check size={14} className="text-[#488262]" /> Accès immédiat à l'arène de jeu
                     </li>
                   </ul>
+                </div>
+
+                {/* SPAM Tip Notification */}
+                <div className="mx-auto mt-4 max-w-md rounded-2xl bg-[#fff8eb] p-3.5 text-left border border-[#f3c969]/40 text-xs text-[#8a6311]">
+                  <p className="font-bold flex items-center gap-1.5 text-[#6e4e08]">
+                    📬 Tu ne trouves pas l'email ?
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-[#785913]">
+                    Pense à vérifier ton dossier <strong>Courrier indésirable / SPAM</strong> ou l'onglet <strong>Promotions</strong>. Le mail peut parfois y arriver par erreur.
+                  </p>
                 </div>
 
                 <button
@@ -277,8 +287,8 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-[#6e7c74]">
                   {tab === "register"
-                    ? "Inscris-toi : un mot de passe temporaire sécurisé te sera envoyé par email."
-                    : "Saisis ton email et ton mot de passe temporaire pour accéder à ton espace."}
+                    ? "Inscris-toi pour recevoir ton lien d'activation et accéder à l'arène VALUO."
+                    : "Saisis ton email et ton mot de passe pour accéder à ton espace de jeu."}
                 </p>
 
                 {errorMsg && (
@@ -371,7 +381,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                     <div>
                       <div className="flex items-center justify-between">
                         <label htmlFor="login-pwd" className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
-                          Mot de passe temporaire ou défini
+                          Mot de passe
                         </label>
                         <button
                           type="button"

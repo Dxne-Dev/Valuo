@@ -91,7 +91,7 @@ export default function PasswordChangeModal({
             </div>
 
             <p className="mt-3 text-xs leading-relaxed text-[#68766e]">
-              Vous vous êtes connecté avec un mot de passe temporaire. Définissez votre mot de passe personnel définitif pour sécuriser votre compte.
+              Définissez votre mot de passe personnel sécurisé pour protéger l'accès à votre compte.
             </p>
 
             <form onSubmit={handleSubmit} className="mt-5 space-y-4">
