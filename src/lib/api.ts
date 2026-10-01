@@ -120,7 +120,10 @@ export async function registerWithTemporaryPassword(email: string, name?: string
     };
   }
 
-  // 3. Send custom VALUO welcome email only on successful registration
+  // 3. Prevent auto-login: immediately clear any sign-up session so the user MUST retrieve & enter the temp password
+  await supabase.auth.signOut();
+
+  // 4. Send custom VALUO welcome email only on successful registration
   await sendValuoWelcomeEmail({
     email: cleanEmail,
     name: userName,
@@ -128,7 +131,7 @@ export async function registerWithTemporaryPassword(email: string, name?: string
     activationUrl,
   });
 
-  return { data, error: null, tempPassword, isMock: false };
+  return { data: null, error: null, tempPassword, isMock: false };
 }
 
 export async function signInWithPassword(email: string, password: string) {
