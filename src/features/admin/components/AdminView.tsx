@@ -43,6 +43,10 @@ import {
   fetchAllChallengesList,
   deleteChallenge,
   activateChallengeNow,
+  fetchAllMysteryBoxesList,
+  activateMysteryBoxNow,
+  revealMysteryBoxNow,
+  deleteMysteryBox,
   type MysteryItemData,
   saveActiveChallenge,
   saveMysteryItem,
@@ -193,6 +197,23 @@ export default function AdminView({
   const [isPinned, setIsPinned] = useState(true);
   const [publishingPost, setPublishingPost] = useState(false);
 
+  // Mystery Boxes queue state
+  const [mysteryBoxesList, setMysteryBoxesList] = useState<MysteryItemData[]>([]);
+  const [isMysterySchedulingMode, setIsMysterySchedulingMode] = useState(false);
+  const [mysteryDayNumber, setMysteryDayNumber] = useState(mysteryItem.dayNumber || 1);
+  const [mysteryStartsAt, setMysteryStartsAt] = useState(() => {
+    const today = new Date();
+    today.setHours(8, 0, 0, 0);
+    return today.toISOString().slice(0, 16);
+  });
+  const [mysteryEndsAt, setMysteryEndsAt] = useState(() => {
+    const today = new Date();
+    today.setHours(20, 0, 0, 0);
+    return today.toISOString().slice(0, 16);
+  });
+  const [editingMysteryId, setEditingMysteryId] = useState<string | number | null>(null);
+  const [savingMystery, setSavingMystery] = useState(false);
+
   // Mystery form state
   const [mysteryTitle, setMysteryTitle] = useState(mysteryItem.title);
   const [mysteryImage, setMysteryImage] = useState(mysteryItem.image);
@@ -200,6 +221,26 @@ export default function AdminView({
   const [mysteryBrief, setMysteryBrief] = useState(mysteryItem.brief);
   const [mysteryHint, setMysteryHint] = useState(mysteryItem.hint);
   const [mysteryRealPrice, setMysteryRealPrice] = useState(String(mysteryItem.realPrice));
+
+  async function loadMysteryBoxes() {
+    const list = await fetchAllMysteryBoxesList();
+    setMysteryBoxesList(list);
+  }
+
+  useEffect(() => {
+    loadMysteryBoxes();
+  }, [mysteryItem.id, tab]);
+
+  useEffect(() => {
+    if (mysteryItem && !editingMysteryId) {
+      setMysteryTitle(mysteryItem.title);
+      setMysteryImage(mysteryItem.image);
+      setMysteryBrief(mysteryItem.brief);
+      setMysteryHint(mysteryItem.hint);
+      setMysteryRealPrice(String(mysteryItem.realPrice));
+      setMysteryDayNumber(mysteryItem.dayNumber || 1);
+    }
+  }, [mysteryItem, editingMysteryId]);
 
   // Moderation state
   const [searchQuery, setSearchQuery] = useState("");
@@ -476,29 +517,156 @@ export default function AdminView({
     }
   }
 
-  // Handle Mystery Box
+  // Handle Mystery Box CRUD & Scheduling
+  function resetMysteryForm() {
+    setEditingMysteryId(null);
+    setMysteryTitle(mysteryItem.title || "");
+    setMysteryImage(mysteryItem.image || media.mystery);
+    setMysteryFile(null);
+    setMysteryBrief(mysteryItem.brief || "");
+    setMysteryHint(mysteryItem.hint || "");
+    setMysteryRealPrice(String(mysteryItem.realPrice || 50));
+    setMysteryDayNumber(mysteryItem.dayNumber || 1);
+    setIsMysterySchedulingMode(false);
+  }
+
+  function startEditingMysteryBox(box: MysteryItemData) {
+    setEditingMysteryId(box.id || null);
+    setMysteryTitle(box.title);
+    setMysteryImage(box.image);
+    setMysteryFile(null);
+    setMysteryBrief(box.brief);
+    setMysteryHint(box.hint);
+    setMysteryRealPrice(String(box.realPrice));
+    setMysteryDayNumber(box.dayNumber || 1);
+    setIsMysterySchedulingMode(box.status === "scheduled");
+    if (box.starts_at) {
+      setMysteryStartsAt(new Date(box.starts_at).toISOString().slice(0, 16));
+    }
+    if (box.ends_at) {
+      setMysteryEndsAt(new Date(box.ends_at).toISOString().slice(0, 16));
+    }
+    window.scrollTo({ top: 350, behavior: "smooth" });
+    onNotice(`Modification de l'objet « ${box.title} »`);
+  }
+
   async function handleSaveMystery(event: FormEvent) {
     event.preventDefault();
     if (!mysteryTitle.trim()) return;
 
-    let finalImageUrl = mysteryImage;
-    if (mysteryFile) {
-      const uploaded = await uploadImage(mysteryFile, "posts");
-      if (uploaded) finalImageUrl = uploaded;
+    setSavingMystery(true);
+    try {
+      let finalImageUrl = mysteryImage;
+      if (mysteryFile) {
+        const uploaded = await uploadImage(mysteryFile, "posts");
+        if (uploaded) finalImageUrl = uploaded;
+      }
+
+      let startsAtIso: string;
+      let endsAtIso: string;
+
+      if (isMysterySchedulingMode) {
+        startsAtIso = new Date(mysteryStartsAt).toISOString();
+        endsAtIso = new Date(mysteryEndsAt).toISOString();
+      } else {
+        const today = new Date();
+        const start = new Date(today);
+        start.setHours(8, 0, 0, 0);
+        const end = new Date(today);
+        end.setHours(20, 0, 0, 0);
+
+        startsAtIso = start.toISOString();
+        endsAtIso = end.toISOString();
+      }
+
+      const updatedPayload: Partial<MysteryItemData> = {
+        id: editingMysteryId || undefined,
+        title: mysteryTitle.trim(),
+        image: finalImageUrl,
+        brief: mysteryBrief.trim(),
+        hint: mysteryHint.trim(),
+        realPrice: Number(mysteryRealPrice) || 50,
+        dayNumber: mysteryDayNumber,
+        status: isMysterySchedulingMode ? "scheduled" : "active",
+        starts_at: startsAtIso,
+        ends_at: endsAtIso,
+      };
+
+      const saved = await saveMysteryItem(updatedPayload, {
+        isScheduled: isMysterySchedulingMode,
+        startsAt: startsAtIso,
+        endsAt: endsAtIso,
+        dayNumber: mysteryDayNumber,
+      });
+
+      if (!isMysterySchedulingMode) {
+        onMysteryUpdated({
+          id: saved?.id || editingMysteryId || Date.now(),
+          title: mysteryTitle.trim(),
+          image: finalImageUrl,
+          brief: mysteryBrief.trim(),
+          hint: mysteryHint.trim(),
+          realPrice: Number(mysteryRealPrice) || 50,
+          dayNumber: mysteryDayNumber,
+          status: "active",
+          starts_at: startsAtIso,
+          ends_at: endsAtIso,
+        });
+      }
+
+      await loadMysteryBoxes();
+      resetMysteryForm();
+      onNotice(isMysterySchedulingMode ? "Mystery Box programmée avec succès !" : "Mystery Box mise en jeu (08h00 - 20h00) !");
+    } catch (err: any) {
+      console.error("Save mystery box error:", err);
+      onNotice(`Erreur : ${err.message || "écriture refusée par Supabase"}`);
+    } finally {
+      setSavingMystery(false);
     }
+  }
 
-    const updated: MysteryItemData = {
-      title: mysteryTitle.trim(),
-      image: finalImageUrl,
-      brief: mysteryBrief.trim(),
-      hint: mysteryHint.trim(),
-      realPrice: Number(mysteryRealPrice) || 50,
-    };
+  async function handleActivateMysteryBox(boxId: string | number) {
+    try {
+      const activated = await activateMysteryBoxNow(boxId);
+      if (activated) {
+        onMysteryUpdated({
+          id: activated.id,
+          title: activated.item_name,
+          image: activated.photo_url,
+          brief: activated.description,
+          hint: activated.history_details,
+          realPrice: Number(activated.real_price),
+          dayNumber: activated.day_number,
+          status: "active",
+          starts_at: activated.starts_at,
+          ends_at: activated.ends_at,
+        });
+      }
+      await loadMysteryBoxes();
+      onNotice("Mystery Box mise en jeu immédiatement en direct !");
+    } catch (err: any) {
+      onNotice(`Erreur : ${err.message || "activation impossible"}`);
+    }
+  }
 
-    await saveMysteryItem(updated);
-    setMysteryFile(null);
-    onMysteryUpdated(updated);
-    onNotice("Mystery Box du jour mise à jour avec succès.");
+  async function handleRevealMysteryBox(boxId: string | number) {
+    try {
+      await revealMysteryBoxNow(boxId);
+      await loadMysteryBoxes();
+      onNotice("Vrai prix révélé et points d'escouade calculés !");
+    } catch (err: any) {
+      onNotice(`Erreur : ${err.message || "révélation impossible"}`);
+    }
+  }
+
+  async function handleDeleteMysteryBoxItem(boxId: string | number) {
+    try {
+      await deleteMysteryBox(boxId);
+      await loadMysteryBoxes();
+      onNotice("Mystery Box supprimée.");
+    } catch (err: any) {
+      onNotice(`Erreur : ${err.message || "suppression impossible"}`);
+    }
   }
 
   // Handle Edit Any Post Modal
@@ -1336,83 +1504,352 @@ export default function AdminView({
         </motion.div>
       )}
 
-      {/* TAB 3: MYSTERY BOX */}
+      {/* TAB 3: MYSTERY BOX & PROGRAMMATION DE LA SEMAINE */}
       {tab === "mystery" && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-[28px] bg-white p-6 sm:p-8 shadow-sm border border-[#173f35]/8">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#e9683a]">
-            <PackageOpen size={16} /> Jeu de la Mystery Box
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+          {/* 1. CARTE DE L'OBJET MYSTÈRE ACTUELLEMENT EN JEU */}
+          <div className="overflow-hidden rounded-[28px] border-2 border-[#f3c969]/60 bg-gradient-to-br from-[#fefbf3] via-white to-[#fbf8f1] p-6 sm:p-7 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-[#e9683a] animate-ping" />
+                <span className="text-xs font-extrabold uppercase tracking-wider text-[#e9683a]">
+                  Mystery Box du Jour (Session 08h00 ➔ 20h00)
+                </span>
+                <span className="rounded-full bg-[#173f35] px-2.5 py-0.5 text-[10px] font-bold text-[#f3c969]">
+                  Jour {mysteryItem.dayNumber || 4} / 6
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ChallengeCountdownBadge endsAt={mysteryItem.ends_at} />
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800 border border-emerald-300">
+                  Prix réel : {mysteryItem.realPrice} €
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col md:flex-row gap-6 items-start md:items-center">
+              <img
+                src={mysteryItem.image}
+                alt={mysteryItem.title}
+                className="h-28 w-28 rounded-2xl object-cover border-2 border-[#173f35]/15 shadow-md shrink-0"
+              />
+              <div className="flex-1">
+                <h3 className="font-display text-2xl font-bold text-[#173f35]">{mysteryItem.title}</h3>
+                <p className="mt-1 text-xs text-[#53655b] leading-relaxed line-clamp-2">{mysteryItem.brief}</p>
+                <div className="mt-2.5 flex items-center gap-2 text-xs font-bold text-[#e9683a]">
+                  <Sparkles size={13} />
+                  <span>Indice : « {mysteryItem.hint} »</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0 w-full md:w-auto">
+                <button
+                  type="button"
+                  onClick={() => mysteryItem.id && handleRevealMysteryBox(mysteryItem.id)}
+                  className="flex items-center justify-center gap-1.5 rounded-full bg-[#e9683a] px-4 py-2.5 text-xs font-extrabold text-white shadow-md transition hover:bg-[#d9582d]"
+                >
+                  <Sparkles size={14} /> Révéler le prix maintenant
+                </button>
+                <button
+                  type="button"
+                  onClick={() => startEditingMysteryBox(mysteryItem)}
+                  className="flex items-center justify-center gap-1.5 rounded-full border border-[#173f35]/15 bg-white px-4 py-2.5 text-xs font-bold text-[#173f35] shadow-sm transition hover:bg-[#fbf8f1]"
+                >
+                  <Edit3 size={14} /> Modifier cet objet
+                </button>
+              </div>
+            </div>
           </div>
-          <h2 className="mt-1 font-display text-2xl font-semibold text-[#173f35]">Configurer l'objet du jour</h2>
-          <p className="mt-1 text-xs text-[#6f7e76]">
-            Les joueurs devront estimer le prix de cet objet avant la révélation de 20h.
-          </p>
 
-          <form onSubmit={handleSaveMystery} className="mt-6 space-y-4">
-            <div>
-              <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Nom de l'objet</label>
-              <input
-                type="text"
-                value={mysteryTitle}
-                onChange={(e) => setMysteryTitle(e.target.value)}
-                placeholder="Ex: Vase en faïence à décor floral"
-                className="mt-1.5 w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] px-4 py-3.5 text-sm font-bold text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
-              />
+          {/* 2. FORMULAIRE DE CONFIGURATION & PROGRAMMATION */}
+          <div className="rounded-[28px] bg-white p-6 sm:p-8 shadow-sm border border-[#173f35]/8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#e9683a]">
+                  <PackageOpen size={16} /> {editingMysteryId ? "Modifier l'Objet Mystère" : "Ajouter / Programmer un Objet"}
+                </div>
+                <h2 className="mt-1 font-display text-2xl font-semibold text-[#173f35]">
+                  {editingMysteryId ? "Modifier les paramètres de la box" : "Planifier les Mystery Boxes de la semaine"}
+                </h2>
+                <p className="mt-1 text-xs text-[#6f7e76]">
+                  Créneau officiel d'estimation : 08h00 à 20h00 avec révélation et calcul de points à 20h00.
+                </p>
+              </div>
+
+              {/* Mode Toggle: Immédiat vs Programmer Semaine */}
+              <div className="flex items-center rounded-2xl bg-[#f5f0e5] p-1.5 border border-[#173f35]/8">
+                <button
+                  type="button"
+                  onClick={() => setIsMysterySchedulingMode(false)}
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    !isMysterySchedulingMode
+                      ? "bg-[#173f35] text-white shadow-sm"
+                      : "text-[#53655b] hover:text-[#173f35]"
+                  }`}
+                >
+                  <Play size={13} /> Actif aujourd'hui
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsMysterySchedulingMode(true)}
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    isMysterySchedulingMode
+                      ? "bg-[#e9683a] text-white shadow-sm"
+                      : "text-[#53655b] hover:text-[#173f35]"
+                  }`}
+                >
+                  <CalendarPlus size={13} /> Programmer date
+                </button>
+              </div>
             </div>
 
-            <div>
-              <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Photo de l'objet mystère</label>
-              <div className="mt-2 flex items-center gap-4">
-                <img src={mysteryImage} alt="Objet Mystère" className="h-20 w-20 rounded-2xl object-cover border-2 border-[#173f35]/10" />
-                <label className="flex cursor-pointer items-center gap-2 rounded-full border-2 border-dashed border-[#173f35]/20 bg-[#fbf8f1] px-4 py-2.5 text-xs font-extrabold text-[#173f35] transition hover:border-[#e9683a] hover:bg-white hover:text-[#e9683a]">
-                  <Upload size={15} /> Téléverser l'image
-                  <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, setMysteryImage, setMysteryFile)} className="hidden" />
+            <form onSubmit={handleSaveMystery} className="mt-6 space-y-5">
+              {/* Day selector */}
+              <div>
+                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
+                  Numéro du Jour dans le Cycle de la Semaine
                 </label>
+                <div className="mt-2 grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {[1, 2, 3, 4, 5, 6].map((day) => (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => setMysteryDayNumber(day)}
+                      className={`rounded-xl border py-2.5 px-3 text-xs font-bold transition ${
+                        mysteryDayNumber === day
+                          ? "border-[#173f35] bg-[#173f35] text-white shadow-sm"
+                          : "border-[#173f35]/10 bg-[#fbf8f1] text-[#53655b] hover:bg-white"
+                      }`}
+                    >
+                      Jour #{day}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Description & Détails de l'état</label>
-              <textarea
-                rows={2}
-                value={mysteryBrief}
-                onChange={(e) => setMysteryBrief(e.target.value)}
-                placeholder="Ex: Hauteur 31 cm. Signature sous la base…"
-                className="mt-1.5 w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] p-4 text-sm text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Indice secret</label>
-              <input
-                type="text"
-                value={mysteryHint}
-                onChange={(e) => setMysteryHint(e.target.value)}
-                placeholder="Ex: Une pièce décorative qui a traversé au moins trois générations."
-                className="mt-1.5 w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] px-4 py-3 text-sm text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Vrai prix réel constaté (€)</label>
-              <div className="relative mt-1.5">
+              <div>
+                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Nom de l'objet</label>
                 <input
-                  type="number"
-                  value={mysteryRealPrice}
-                  onChange={(e) => setMysteryRealPrice(e.target.value)}
-                  placeholder="Ex: 68"
-                  className="w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] px-4 py-3.5 pr-10 text-sm font-bold text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
+                  type="text"
+                  required
+                  value={mysteryTitle}
+                  onChange={(e) => setMysteryTitle(e.target.value)}
+                  placeholder="Ex: Vase en faïence à décor floral, Lampe champignon 1974…"
+                  className="mt-1.5 w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] px-4 py-3.5 text-sm font-bold text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
                 />
-                <span className="pointer-events-none absolute right-4 top-3.5 font-bold text-[#173f35]/40">€</span>
               </div>
+
+              <div>
+                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Photo de l'objet mystère</label>
+                <div className="mt-2 flex items-center gap-4">
+                  <img
+                    src={mysteryImage}
+                    alt="Objet Mystère"
+                    className="h-20 w-20 rounded-2xl object-cover border-2 border-[#173f35]/10 shadow-sm"
+                  />
+                  <label className="flex cursor-pointer items-center gap-2 rounded-full border-2 border-dashed border-[#173f35]/20 bg-[#fbf8f1] px-4 py-2.5 text-xs font-extrabold text-[#173f35] transition hover:border-[#e9683a] hover:bg-white hover:text-[#e9683a]">
+                    <Upload size={15} /> Téléverser une photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handlePhotoUpload(e, setMysteryImage, setMysteryFile)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
+                  Description & Détails de l'état
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={mysteryBrief}
+                  onChange={(e) => setMysteryBrief(e.target.value)}
+                  placeholder="Ex: Hauteur 31 cm. Signature sous la base. Parfait état de conservation…"
+                  className="mt-1.5 w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] p-4 text-sm text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">Indice secret pour les joueurs</label>
+                <input
+                  type="text"
+                  required
+                  value={mysteryHint}
+                  onChange={(e) => setMysteryHint(e.target.value)}
+                  placeholder="Ex: Une pièce décorative qui a traversé au moins trois générations."
+                  className="mt-1.5 w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] px-4 py-3 text-sm text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
+                  Vrai prix réel de référence (€)
+                </label>
+                <div className="relative mt-1.5">
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={mysteryRealPrice}
+                    onChange={(e) => setMysteryRealPrice(e.target.value)}
+                    placeholder="Ex: 68"
+                    className="w-full rounded-2xl border-2 border-[#173f35]/10 bg-[#fbf8f1] px-4 py-3.5 pr-10 text-sm font-bold text-[#173f35] outline-none transition focus:border-[#e9683a] focus:bg-white"
+                  />
+                  <span className="pointer-events-none absolute right-4 top-3.5 font-bold text-[#173f35]/40">€</span>
+                </div>
+              </div>
+
+              {isMysterySchedulingMode && (
+                <div className="grid sm:grid-cols-2 gap-4 rounded-2xl bg-[#fbf8f1] p-4 border border-[#173f35]/8">
+                  <div>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
+                      Ouverture des estimations (08h00)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={mysteryStartsAt}
+                      onChange={(e) => setMysteryStartsAt(e.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-[#173f35]/15 bg-white px-4 py-3 text-xs font-bold text-[#173f35]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-[#53655b]">
+                      Clôture & Révélation du Prix (20h00)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={mysteryEndsAt}
+                      onChange={(e) => setMysteryEndsAt(e.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-[#173f35]/15 bg-white px-4 py-3 text-xs font-bold text-[#173f35]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={savingMystery}
+                  className="flex items-center gap-2 rounded-full bg-[#173f35] px-6 py-3.5 text-xs font-extrabold text-white transition hover:bg-[#23584b] shadow-lg shadow-[#173f35]/20 disabled:opacity-50"
+                >
+                  {savingMystery ? (
+                    <RefreshCw size={15} className="animate-spin" />
+                  ) : (
+                    <Save size={15} />
+                  )}
+                  {editingMysteryId
+                    ? "Mettre à jour l'objet mystère"
+                    : isMysterySchedulingMode
+                    ? "Planifier cet objet dans le cycle"
+                    : "Enregistrer et activer (08h-20h)"}
+                </button>
+
+                {editingMysteryId && (
+                  <button
+                    type="button"
+                    onClick={resetMysteryForm}
+                    className="rounded-full border border-[#173f35]/15 bg-white px-5 py-3.5 text-xs font-bold text-[#53655b] hover:bg-[#fbf8f1]"
+                  >
+                    Annuler la modification
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          {/* 3. FILE DES MYSTERY BOXES DE LA SEMAINE */}
+          <div className="rounded-[28px] bg-white p-6 sm:p-8 shadow-sm border border-[#173f35]/8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#488262]">
+                <Layers size={16} /> Planning des Mystery Boxes de la Semaine
+              </div>
+              <span className="rounded-full bg-[#173f35]/10 px-3 py-1 text-xs font-bold text-[#173f35]">
+                {mysteryBoxesList.length} objet(s) configuré(s)
+              </span>
             </div>
 
-            <button
-              type="submit"
-              className="mt-4 flex items-center gap-2 rounded-full bg-[#173f35] px-6 py-3.5 text-xs font-extrabold text-white transition hover:bg-[#23584b] shadow-lg shadow-[#173f35]/20"
-            >
-              <Save size={16} /> Enregistrer la Mystery Box
-            </button>
-          </form>
+            <div className="mt-5 space-y-3">
+              {mysteryBoxesList.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[#173f35]/15 bg-[#fbf8f1] p-6 text-center">
+                  <PackageOpen size={20} className="mx-auto text-[#8a958f]" />
+                  <p className="mt-2 text-xs font-bold text-[#53655b]">Aucune autre box programmée dans la semaine</p>
+                  <p className="mt-1 text-[11px] text-[#8a958f]">
+                    Ajoutez les 6 objets de la semaine pour que la relève 08h00 - 20h00 soit 100% automatisée.
+                  </p>
+                </div>
+              ) : (
+                mysteryBoxesList.map((box) => (
+                  <div
+                    key={box.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-[#173f35]/10 bg-[#fbf8f1] p-4 transition hover:bg-white hover:shadow-sm"
+                  >
+                    <div className="flex items-center gap-4">
+                      <img
+                        src={box.image}
+                        alt={box.title}
+                        className="h-14 w-14 rounded-xl object-cover border border-[#173f35]/10 shrink-0"
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-[#173f35] px-2.5 py-0.5 text-[10px] font-extrabold text-[#f3c969]">
+                            Jour #{box.dayNumber || 1}
+                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            box.status === "active"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : box.status === "revealed"
+                              ? "bg-purple-100 text-purple-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}>
+                            {box.status === "active" ? "🟢 En cours" : box.status === "revealed" ? "🎁 Prix Révélé" : "📅 Programmé"}
+                          </span>
+                          <span className="text-xs font-extrabold text-[#173f35]">
+                            {box.realPrice} €
+                          </span>
+                        </div>
+                        <h4 className="mt-1 text-sm font-bold text-[#173f35]">{box.title}</h4>
+                        <p className="text-xs text-[#6e7d75] line-clamp-1">{box.brief}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {box.status !== "active" && (
+                        <button
+                          type="button"
+                          onClick={() => box.id && handleActivateMysteryBox(box.id)}
+                          className="flex items-center gap-1 rounded-full bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 shadow-sm"
+                        >
+                          <Play size={12} /> Mettre en jeu
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => startEditingMysteryBox(box)}
+                        className="rounded-full border border-[#173f35]/15 bg-white p-2 text-[#173f35] hover:bg-[#f5efe6]"
+                        title="Modifier"
+                      >
+                        <Edit3 size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => box.id && handleDeleteMysteryBoxItem(box.id)}
+                        className="rounded-full border border-red-200 bg-white p-2 text-red-600 hover:bg-red-50"
+                        title="Supprimer"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </motion.div>
       )}
 

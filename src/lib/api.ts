@@ -684,11 +684,18 @@ export async function deleteSquadAdmin(squadId: string, squadCode?: string) {
 }
 
 export type MysteryItemData = {
+  id?: string | number;
   title: string;
   image: string;
   brief: string;
   hint: string;
   realPrice: number;
+  historyDetails?: string;
+  dayNumber?: number;
+  starts_at?: string;
+  ends_at?: string;
+  status?: "draft" | "scheduled" | "active" | "revealed" | "completed" | "archived";
+  created_at?: string;
 };
 
 export async function fetchMysteryItem(): Promise<MysteryItemData> {
@@ -698,34 +705,77 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
     brief: "Hauteur 31 cm. Signature partiellement visible sous la base. Quelques traces du temps, sans éclat majeur.",
     hint: "Une pièce décorative qui a traversé au moins trois générations.",
     realPrice: 68,
+    dayNumber: 4,
+    status: "active",
   };
 
-  // mystery_boxes is the single source of truth (6 items/week, active = today's item)
   if (isSupabaseConfigured) {
     try {
-      const { data, error } = await supabase
+      const now = new Date();
+      const nowIso = now.toISOString();
+
+      // 1. Check for active box
+      const { data: activeList } = await supabase
         .from("mystery_boxes")
         .select("*")
         .eq("active", true)
-        .order("date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order("starts_at", { ascending: false })
+        .limit(5);
 
-      if (!error && data) {
+      let chosen = activeList?.find((b) => {
+        if (!b.ends_at) return true;
+        return true;
+      });
+
+      // 2. If no active box, check scheduled box ready to start
+      if (!chosen) {
+        const { data: scheduled } = await supabase
+          .from("mystery_boxes")
+          .select("*")
+          .eq("status", "scheduled")
+          .lte("starts_at", nowIso)
+          .order("starts_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (scheduled) {
+          await supabase
+            .from("mystery_boxes")
+            .update({ status: "active", active: true })
+            .eq("id", scheduled.id);
+          chosen = { ...scheduled, status: "active", active: true };
+        }
+      }
+
+      if (!chosen && activeList && activeList.length > 0) {
+        chosen = activeList[0];
+      }
+
+      if (chosen) {
+        const endsAtTime = chosen.ends_at ? new Date(chosen.ends_at).getTime() : 0;
+        const isRevealed = Boolean(endsAtTime > 0 && Date.now() >= endsAtTime) || chosen.status === "revealed";
+
         const item: MysteryItemData = {
-          title: data.item_name,
-          image: data.photo_url,
-          brief: data.description || "",
-          hint: data.history_details || "",
-          realPrice: Number(data.real_price) || 0,
+          id: chosen.id,
+          title: chosen.item_name,
+          image: chosen.photo_url,
+          brief: chosen.description || "",
+          hint: chosen.history_details || "",
+          realPrice: Number(chosen.real_price) || 0,
+          dayNumber: chosen.day_number || 1,
+          starts_at: chosen.starts_at || chosen.created_at,
+          ends_at: chosen.ends_at || undefined,
+          status: isRevealed ? "revealed" : (chosen.status || "active"),
+          created_at: chosen.created_at,
         };
+
         if (typeof window !== "undefined") {
           localStorage.setItem("valuo_mystery_item", JSON.stringify(item));
         }
         return item;
       }
     } catch {
-      // Network error: fall through to local cache
+      // Fall through to local cache
     }
   }
 
@@ -738,72 +788,209 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
   return defaultMystery;
 }
 
-export async function saveMysteryItem(item: Partial<MysteryItemData>) {
-  // mystery_boxes is the single source of truth — update today's active item
+export async function fetchAllMysteryBoxesList(): Promise<MysteryItemData[]> {
+  if (!isSupabaseConfigured) return [];
+  try {
+    const { data, error } = await supabase
+      .from("mystery_boxes")
+      .select("*")
+      .order("starts_at", { ascending: false });
+
+    if (error || !data) return [];
+
+    return data.map((d) => ({
+      id: d.id,
+      title: d.item_name,
+      image: d.photo_url,
+      brief: d.description || "",
+      hint: d.history_details || "",
+      realPrice: Number(d.real_price) || 0,
+      dayNumber: d.day_number || 1,
+      starts_at: d.starts_at || d.created_at,
+      ends_at: d.ends_at || undefined,
+      status: d.status || (d.active ? "active" : "revealed"),
+      created_at: d.created_at,
+    }));
+  } catch (err) {
+    console.warn("fetchAllMysteryBoxesList error:", err);
+    return [];
+  }
+}
+
+export async function saveMysteryItem(
+  item: Partial<MysteryItemData>,
+  options?: {
+    isScheduled?: boolean;
+    startsAt?: string;
+    endsAt?: string;
+    dayNumber?: number;
+  }
+) {
   if (isSupabaseConfigured) {
     try {
-      const todayStr = new Date().toISOString().split("T")[0];
-      const dayOfWeek = new Date().getDay(); // 0=Sun, 1=Mon ... 6=Sat
-      const dayNumber = dayOfWeek === 0 ? 6 : Math.min(dayOfWeek, 6);
+      const isScheduled = options?.isScheduled ?? (item.status === "scheduled");
+      
+      // Default: today or chosen date from 08h00 to 20h00
+      let startsAt = options?.startsAt || item.starts_at;
+      let endsAt = options?.endsAt || item.ends_at;
 
-      // Try to find the existing active item or today's item
-      const { data: existing } = await supabase
-        .from("mystery_boxes")
-        .select("id")
-        .or(`active.eq.true,date.eq.${todayStr}`)
-        .order("date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      if (!startsAt || !endsAt) {
+        const today = new Date();
+        const start = new Date(today);
+        start.setHours(8, 0, 0, 0);
+        const end = new Date(today);
+        end.setHours(20, 0, 0, 0);
 
-      if (existing?.id) {
-        const updatePayload: Record<string, any> = {
-          active: true,
-          date: todayStr,
-        };
-        if (item.title !== undefined) updatePayload.item_name = item.title;
-        if (item.image !== undefined) updatePayload.photo_url = item.image;
-        if (item.brief !== undefined) updatePayload.description = item.brief;
-        if (item.hint !== undefined) updatePayload.history_details = item.hint;
-        if (item.realPrice !== undefined) updatePayload.real_price = item.realPrice;
+        if (!startsAt) startsAt = start.toISOString();
+        if (!endsAt) endsAt = end.toISOString();
+      }
 
-        const { error: updateErr } = await supabase
+      const todayStr = new Date(startsAt).toISOString().split("T")[0];
+      const dayNumber = options?.dayNumber || item.dayNumber || 1;
+      const boxStatus = isScheduled ? "scheduled" : "active";
+
+      // If active now, unmark others as active
+      if (!isScheduled) {
+        await supabase
           .from("mystery_boxes")
-          .update(updatePayload)
-          .eq("id", existing.id);
+          .update({ active: false, status: "completed" })
+          .eq("active", true);
+      }
+
+      if (item.id) {
+        // UPDATE
+        const { data, error: updateErr } = await supabase
+          .from("mystery_boxes")
+          .update({
+            item_name: item.title,
+            photo_url: item.image,
+            description: item.brief,
+            history_details: item.hint,
+            real_price: item.realPrice,
+            day_number: dayNumber,
+            date: todayStr,
+            active: !isScheduled,
+            status: boxStatus,
+            starts_at: startsAt,
+            ends_at: endsAt,
+          })
+          .eq("id", item.id)
+          .select()
+          .single();
 
         if (updateErr) {
-          console.warn("Could not update mystery box in Supabase:", updateErr);
+          console.error("saveMysteryItem update error:", updateErr);
+          throw new Error(updateErr.message);
         }
+        return data;
       } else {
-        // No active item yet — insert one for today
-        const { error: insertErr } = await supabase.from("mystery_boxes").insert({
-          item_name: item.title || "Vase en faïence à décor floral",
-          photo_url: item.image || media.mystery,
-          description: item.brief || "",
-          history_details: item.hint || "",
-          real_price: item.realPrice || 68,
-          date: todayStr,
-          day_number: dayNumber,
-          active: true,
-        });
+        // INSERT
+        const { data, error: insertErr } = await supabase
+          .from("mystery_boxes")
+          .insert({
+            item_name: item.title || "Objet Mystère",
+            photo_url: item.image || media.mystery,
+            description: item.brief || "",
+            history_details: item.hint || "",
+            real_price: item.realPrice || 50,
+            day_number: dayNumber,
+            date: todayStr,
+            active: !isScheduled,
+            status: boxStatus,
+            starts_at: startsAt,
+            ends_at: endsAt,
+          })
+          .select()
+          .single();
 
         if (insertErr) {
-          console.warn("Could not insert mystery box into Supabase:", insertErr);
+          console.error("saveMysteryItem insert error:", insertErr);
+          throw new Error(insertErr.message);
         }
+        return data;
       }
-    } catch (err) {
-      console.warn("Could not save mystery item to Supabase:", err);
+    } catch (err: any) {
+      console.warn("saveMysteryItem failed:", err);
+      throw err;
     }
   }
+}
 
-  // Always update local cache so the admin browser sees it instantly
-  if (typeof window !== "undefined") {
-    const cached = localStorage.getItem("valuo_mystery_item");
-    let merged: Partial<MysteryItemData> = { ...item };
-    if (cached) {
-      try { merged = { ...JSON.parse(cached), ...item }; } catch {}
-    }
-    localStorage.setItem("valuo_mystery_item", JSON.stringify(merged));
+export async function activateMysteryBoxNow(boxId: string | number) {
+  if (!isSupabaseConfigured) return;
+
+  // Mark other boxes as completed
+  await supabase
+    .from("mystery_boxes")
+    .update({ active: false, status: "completed" })
+    .eq("active", true);
+
+  const now = new Date();
+  const end = new Date(now);
+  end.setHours(20, 0, 0, 0);
+  if (end.getTime() <= now.getTime()) {
+    end.setTime(now.getTime() + 4 * 3600 * 1000);
+  }
+
+  const { data, error } = await supabase
+    .from("mystery_boxes")
+    .update({
+      active: true,
+      status: "active",
+      starts_at: now.toISOString(),
+      ends_at: end.toISOString(),
+    })
+    .eq("id", boxId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("activateMysteryBoxNow error:", error);
+    throw new Error(error.message || "Impossible d'activer cet objet");
+  }
+
+  return data;
+}
+
+export async function revealMysteryBoxNow(boxId: string | number) {
+  if (!isSupabaseConfigured) return;
+
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("mystery_boxes")
+    .update({
+      status: "revealed",
+      ends_at: nowIso,
+    })
+    .eq("id", boxId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("revealMysteryBoxNow error:", error);
+    throw new Error(error.message || "Impossible de révéler cet objet");
+  }
+
+  // Calculate points
+  try {
+    await supabase.rpc("calculate_mystery_box_points", { p_box_id: boxId });
+  } catch (rpcErr) {
+    console.warn("RPC calculate_mystery_box_points fallback:", rpcErr);
+  }
+
+  return data;
+}
+
+export async function deleteMysteryBox(boxId: string | number) {
+  if (!isSupabaseConfigured) return;
+  const { error } = await supabase
+    .from("mystery_boxes")
+    .delete()
+    .eq("id", boxId);
+
+  if (error) {
+    console.error("deleteMysteryBox error:", error);
+    throw new Error(error.message || "Impossible de supprimer cet objet");
   }
 }
 

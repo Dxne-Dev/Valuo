@@ -19,6 +19,10 @@ import {
   fetchAllChallengesList,
   deleteChallenge,
   activateChallengeNow,
+  fetchAllMysteryBoxesList,
+  activateMysteryBoxNow,
+  revealMysteryBoxNow,
+  deleteMysteryBox,
 } from "@/lib/api";
 
 export {
@@ -36,6 +40,10 @@ export {
   fetchAllChallengesList,
   deleteChallenge,
   activateChallengeNow,
+  fetchAllMysteryBoxesList,
+  activateMysteryBoxNow,
+  revealMysteryBoxNow,
+  deleteMysteryBox,
 };
 export type { AdminMetrics, AdminSquadSummary, ChallengeData, MysteryItemData };
 

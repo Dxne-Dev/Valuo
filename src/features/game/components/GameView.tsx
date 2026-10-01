@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Check, Clock3, Info, PackageOpen, RotateCcw, Sparkles, Trophy } from "lucide-react";
+import { ArrowLeft, Check, Clock, Edit2, Info, Lock, PackageOpen, RotateCcw, Sparkles, Timer, Trophy } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { type GroupData, media, type UserProfile } from "@/data";
 import { computeRankings } from "../services/gameService";
 import type { MysteryItemData } from "@/lib/api";
+import { useCountdown } from "@/lib/useCountdown";
 
 export type GameViewProps = {
   group?: GroupData | null;
@@ -13,8 +14,17 @@ export type GameViewProps = {
 };
 
 export default function GameView({ group, currentUser, mysteryItem, onOpenGroup }: GameViewProps) {
-  const [estimate, setEstimate] = useState("");
-  const [revealed, setRevealed] = useState(false);
+  const [estimate, setEstimate] = useState(() => {
+    return localStorage.getItem("valuo_user_estimate") || "";
+  });
+  const [hasSubmitted, setHasSubmitted] = useState(() => {
+    return Boolean(localStorage.getItem("valuo_user_estimate"));
+  });
+
+  const countdown = useCountdown(mysteryItem?.ends_at);
+  const isTimeExpired = countdown.isExpired;
+  const isRevealed = isTimeExpired || mysteryItem?.status === "revealed";
+
   const amount = Number(estimate.replace(",", ".")) || 0;
 
   const itemTitle = mysteryItem?.title || "Vase en faïence à décor floral";
@@ -34,23 +44,27 @@ export default function GameView({ group, currentUser, mysteryItem, onOpenGroup 
         avatar: currentUser?.avatar || "https://images.pexels.com/photos/14842170/pexels-photo-14842170.jpeg",
         points: 0,
         change: 0,
-        estimate: null,
+        estimate: amount || null,
       },
     ];
-  }, [group, currentUser]);
+  }, [group, currentUser, amount]);
 
   const { results, userRank, earned } = useMemo(() => {
-    return computeRankings(members, amount, realPrice);
+    return computeRankings(members, amount || realPrice, realPrice);
   }, [members, amount, realPrice]);
 
   function submitEstimate(event: FormEvent) {
     event.preventDefault();
-    if (amount > 0) setRevealed(true);
+    if (amount > 0) {
+      setHasSubmitted(true);
+      localStorage.setItem("valuo_user_estimate", String(amount));
+    }
   }
 
   function resetGame() {
     setEstimate("");
-    setRevealed(false);
+    setHasSubmitted(false);
+    localStorage.removeItem("valuo_user_estimate");
   }
 
   return (
@@ -58,19 +72,31 @@ export default function GameView({ group, currentUser, mysteryItem, onOpenGroup 
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#e9683a]">
-            <PackageOpen size={15} /> Mystery Box · Estimation du jour
+            <PackageOpen size={15} /> Mystery Box · Jour #{mysteryItem?.dayNumber || 4}
           </div>
           <h1 className="font-display text-3xl font-semibold tracking-[-0.03em] text-[#173f35] sm:text-4xl">
-            {revealed ? "Le juste prix" : "À combien l'estimes-tu ?"}
+            {isRevealed ? "Le juste prix révélé" : "À combien l'estimes-tu ?"}
           </h1>
         </div>
-        <div className="flex items-center gap-2 rounded-full bg-[#efe7d8] px-4 py-2 text-xs font-bold text-[#66766d]">
-          <Clock3 size={15} /> Révélation à 20 h
+        
+        {/* Dynamic Countdown Header Badge */}
+        <div className="flex items-center gap-2">
+          {isRevealed ? (
+            <div className="flex items-center gap-2 rounded-full bg-red-50 border border-red-200 px-4 py-2 text-xs font-extrabold text-red-700">
+              <Lock size={14} /> Clôture à 20h00 · Prix Révélé
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-full bg-[#173f35] border border-white/10 px-4 py-2 text-xs font-mono font-bold text-[#f3c969] shadow-md">
+              <Timer size={14} className="animate-pulse text-[#e9683a]" />
+              <span>{countdown.formatted}</span>
+              <span className="font-sans text-[11px] text-white/70">avant révélation (20h)</span>
+            </div>
+          )}
         </div>
       </div>
 
       <AnimatePresence mode="wait">
-        {!revealed ? (
+        {!isRevealed ? (
           <motion.div
             key="estimate"
             initial={{ opacity: 0, y: 14 }}
@@ -80,14 +106,20 @@ export default function GameView({ group, currentUser, mysteryItem, onOpenGroup 
           >
             <div className="relative min-h-[430px] overflow-hidden bg-[#d9d0bf] md:min-h-[590px]">
               <img src={itemImage} alt={itemTitle} className="absolute inset-0 h-full w-full object-cover" />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent p-6 pt-24 text-white md:p-8">
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 via-black/20 to-transparent p-6 pt-24 text-white md:p-8">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#f3c969]">Indice du jour</p>
                 <p className="mt-2 max-w-md font-display text-xl font-semibold">{itemHint}</p>
               </div>
             </div>
 
             <div className="flex flex-col justify-center p-6 sm:p-9 md:p-10">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#e9683a]">Objet du jour</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#e9683a]">Objet du jour</p>
+                <span className="rounded-full bg-[#173f35]/10 px-2.5 py-0.5 text-[10px] font-extrabold text-[#173f35]">
+                  08h00 ➔ 20h00
+                </span>
+              </div>
+              
               <h2 className="mt-3 font-display text-3xl font-semibold leading-tight text-[#173f35]">{itemTitle}</h2>
               <p className="mt-4 text-sm leading-7 text-[#66766d]">
                 {itemBrief}
@@ -95,34 +127,60 @@ export default function GameView({ group, currentUser, mysteryItem, onOpenGroup 
 
               <div className="my-7 h-px bg-[#173f35]/10" />
 
-              <form onSubmit={submitEstimate}>
-                <label htmlFor="estimate" className="text-sm font-extrabold text-[#173f35]">Ton estimation</label>
-                <div className="mt-3 flex items-center rounded-2xl border-2 border-[#173f35]/15 bg-[#fbf8f1] px-5 transition focus-within:border-[#e9683a] focus-within:ring-4 focus-within:ring-[#e9683a]/10">
-                  <input
-                    id="estimate"
-                    type="number"
-                    min="1"
-                    max="9999"
-                    inputMode="decimal"
-                    value={estimate}
-                    onChange={(event) => setEstimate(event.target.value)}
-                    placeholder="00"
-                    autoFocus
-                    className="min-w-0 flex-1 bg-transparent py-4 font-display text-3xl font-semibold text-[#173f35] outline-none placeholder:text-[#173f35]/20"
-                  />
-                  <span className="font-display text-2xl font-semibold text-[#173f35]/45">€</span>
+              {!hasSubmitted ? (
+                <form onSubmit={submitEstimate}>
+                  <label htmlFor="estimate" className="text-sm font-extrabold text-[#173f35]">Ton estimation secrète</label>
+                  <div className="mt-3 flex items-center rounded-2xl border-2 border-[#173f35]/15 bg-[#fbf8f1] px-5 transition focus-within:border-[#e9683a] focus-within:ring-4 focus-within:ring-[#e9683a]/10">
+                    <input
+                      id="estimate"
+                      type="number"
+                      min="1"
+                      max="9999"
+                      inputMode="decimal"
+                      value={estimate}
+                      onChange={(event) => setEstimate(event.target.value)}
+                      placeholder="00"
+                      autoFocus
+                      className="min-w-0 flex-1 bg-transparent py-4 font-display text-3xl font-semibold text-[#173f35] outline-none placeholder:text-[#173f35]/20"
+                    />
+                    <span className="font-display text-2xl font-semibold text-[#173f35]/45">€</span>
+                  </div>
+                  <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-[#8a958f]">
+                    <Info className="mt-0.5 shrink-0" size={14} /> Ton estimation reste secrète dans ton escouade jusqu'à 20h00.
+                  </p>
+                  <button
+                    type="submit"
+                    disabled={!amount}
+                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#e9683a] px-5 py-4 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:bg-[#d9582d] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 shadow-lg shadow-[#e9683a]/25"
+                  >
+                    Valider mon estimation <Check size={17} />
+                  </button>
+                </form>
+              ) : (
+                <div className="rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/50 p-6 text-center space-y-3">
+                  <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-500 text-white shadow-md">
+                    <Check size={22} />
+                  </div>
+                  <p className="font-display text-xl font-bold text-[#173f35]">
+                    Estimation de {amount} € enregistrée !
+                  </p>
+                  <p className="text-xs text-[#53655b] leading-relaxed">
+                    Elle reste confidentielle jusqu'à 20h00. Le juste prix sera révélé à la fin du décompte :
+                  </p>
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-mono font-bold text-[#173f35] border border-emerald-200 shadow-sm">
+                    <Clock size={13} className="text-[#e9683a]" /> {countdown.formatted} restantes
+                  </div>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setHasSubmitted(false)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#173f35] underline hover:text-[#e9683a]"
+                    >
+                      <Edit2 size={12} /> Modifier mon estimation avant 20h
+                    </button>
+                  </div>
                 </div>
-                <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-[#8a958f]">
-                  <Info className="mt-0.5 shrink-0" size={14} /> Ton estimation reste secrète jusqu'à la révélation.
-                </p>
-                <button
-                  type="submit"
-                  disabled={!amount}
-                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#e9683a] px-5 py-4 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:bg-[#d9582d] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
-                >
-                  Valider mon estimation <Check size={17} />
-                </button>
-              </form>
+              )}
 
               {group && (
                 <div className="mt-7 flex items-center justify-between border-t border-[#173f35]/10 pt-5">
