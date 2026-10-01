@@ -17,7 +17,6 @@ import { avatars, media, type UserProfile } from "@/data";
 
 export type ProfileViewProps = {
   profile: UserProfile;
-  isDemoUser?: boolean;
   userPosts?: string[];
   onUpdateProfile: (updated: Partial<UserProfile>) => void;
   onLogout: () => void;
@@ -44,7 +43,6 @@ const coverChoices = [
 
 export default function ProfileView({
   profile,
-  isDemoUser = false,
   userPosts = [],
   onUpdateProfile,
   onLogout,
@@ -153,19 +151,19 @@ export default function ProfileView({
           <div className="mb-10 grid grid-cols-3 divide-x divide-[#173f35]/10 border-y border-[#173f35]/10 py-5 text-center">
             <div>
               <p className="font-display text-3xl font-semibold text-[#173f35]">
-                {isDemoUser ? "12" : "0"}
+                0
               </p>
               <p className="mt-1 text-[10px] font-extrabold uppercase tracking-wider text-[#8a958f]">Objets estimés</p>
             </div>
             <div>
               <p className="font-display text-3xl font-semibold text-[#173f35]">
-                {isDemoUser ? "3" : "0"}
+                0
               </p>
               <p className="mt-1 text-[10px] font-extrabold uppercase tracking-wider text-[#8a958f]">Victoires</p>
             </div>
             <div>
               <p className="font-display text-3xl font-semibold text-[#173f35]">
-                {isDemoUser ? "248" : "0"}
+                0
               </p>
               <p className="mt-1 text-[10px] font-extrabold uppercase tracking-wider text-[#8a958f]">Points</p>
             </div>
@@ -199,23 +197,13 @@ export default function ProfileView({
         </div>
 
         <aside className="space-y-6">
-          {isDemoUser ? (
-            <section className="rounded-[24px] bg-[#f3c969] p-5 text-[#173f35] shadow-lg shadow-[#f3c969]/20">
-              <Trophy size={22} />
-              <h2 className="mt-4 font-display text-xl font-semibold">Œil de lynx</h2>
-              <p className="mt-2 text-xs leading-relaxed text-[#173f35]/75">
-                Ton estimation moyenne se situe à seulement 14 € du juste prix. Tu es dans le top 18 % de VALUO.
-              </p>
-            </section>
-          ) : (
-            <section className="rounded-[24px] bg-[#edf7f2] p-5 text-[#173f35] border border-[#488262]/20">
-              <Trophy size={22} className="text-[#488262]" />
-              <h2 className="mt-4 font-display text-xl font-semibold">Nouveau Joueur</h2>
-              <p className="mt-2 text-xs leading-relaxed text-[#506158]">
-                Participe à ton premier défi photo ou soumets une première estimation de Mystery Box pour débloquer tes premiers badges de réputation !
-              </p>
-            </section>
-          )}
+          <section className="rounded-[24px] bg-[#edf7f2] p-5 text-[#173f35] border border-[#488262]/20">
+            <Trophy size={22} className="text-[#488262]" />
+            <h2 className="mt-4 font-display text-xl font-semibold">Nouveau Joueur</h2>
+            <p className="mt-2 text-xs leading-relaxed text-[#506158]">
+              Participe à ton premier défi photo ou soumets une première estimation de Mystery Box pour débloquer tes premiers badges de réputation !
+            </p>
+          </section>
 
           <section className="divide-y divide-[#173f35]/8 border-y border-[#173f35]/8">
             <button type="button" onClick={onInstall} className="flex w-full items-center gap-3 py-4 text-left text-sm font-extrabold text-[#173f35] transition hover:text-[#e9683a]">

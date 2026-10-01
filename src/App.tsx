@@ -12,18 +12,15 @@ import { NotificationsView } from "@/features/notifications";
 import { OnboardingView } from "@/features/onboarding";
 import { ProfileView } from "@/features/profile";
 import Logo from "./components/Logo";
-import { getCurrentWeekNumber, getValuoCycleInfo } from "./lib/dateUtils";
+import { getValuoCycleInfo } from "./lib/dateUtils";
 
 import {
   type AppNotification,
   avatarPresets,
-  avatars,
   type Comment,
   type FeedPost,
   type GroupData,
   media,
-  pinnedAdminPost,
-  todayChallenge,
   type UserProfile,
 } from "./data";
 import {
@@ -99,7 +96,6 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
   const [isOnboarded, setIsOnboarded] = useState(false);
-  const [isDemoUser, setIsDemoUser] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [authIdentifier, setAuthIdentifier] = useState("");
   const [currentUser, setCurrentUser] = useState<UserProfile>(cleanUserProfile);
@@ -108,13 +104,7 @@ export default function App() {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [activeChallenge, setActiveChallenge] = useState<ChallengeData | null>(null);
-  const [mysteryItem, setMysteryItem] = useState<MysteryItemData>({
-    title: "Vase en faïence à décor floral",
-    image: media.mystery,
-    brief: "Hauteur 31 cm. Signature partiellement visible sous la base. Quelques traces du temps, sans éclat majeur.",
-    hint: "Une pièce décorative qui a traversé au moins trois générations.",
-    realPrice: 68,
-  });
+  const [mysteryItem, setMysteryItem] = useState<MysteryItemData | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -152,7 +142,6 @@ export default function App() {
           const session = await getCurrentSession();
           if (session?.user) {
             setUserId(session.user.id);
-            setIsDemoUser(false);
             if (session.user.email) setAuthIdentifier(session.user.email);
 
             // Clean URL parameters once authenticated (avoid ?mode=login#... staying in address bar)
@@ -163,22 +152,9 @@ export default function App() {
             await loadUserData(session.user.id, session.user);
             setSignedIn(true);
           } else {
-            // If no active Supabase session, check if demo user is active in localStorage
-            const isDemoActive = typeof window !== "undefined" && localStorage.getItem("valuo_demo_user") === "true";
-            if (isDemoActive) {
-              setIsDemoUser(true);
-              setSignedIn(true);
-              setIsOnboarded(true);
-              const cachedSquad = localStorage.getItem("valuo_demo_squad");
-              if (cachedSquad) {
-                try { setGroup(JSON.parse(cachedSquad)); } catch {}
-              }
-            } else {
-              setSignedIn(false);
-              setUserId(null);
-              setIsDemoUser(false);
-              setIsOnboarded(false);
-            }
+            setSignedIn(false);
+            setUserId(null);
+            setIsOnboarded(false);
           }
         } catch (authErr) {
           console.warn("Init auth error:", authErr);
@@ -196,7 +172,6 @@ export default function App() {
           if (event === "SIGNED_IN" || event === "USER_UPDATED") {
             if (newSession?.user && newSession.user.id !== userIdRef.current) {
               setUserId(newSession.user.id);
-              setIsDemoUser(false);
               if (newSession.user.email) setAuthIdentifier(newSession.user.email);
 
               if (typeof window !== "undefined" && (window.location.search || window.location.hash)) {
@@ -210,7 +185,6 @@ export default function App() {
           } else if (event === "SIGNED_OUT") {
             setSignedIn(false);
             setUserId(null);
-            setIsDemoUser(false);
             setIsOnboarded(false);
             crossTabChannel?.postMessage({ type: "AUTH_LOGOUT" });
           }
@@ -231,7 +205,6 @@ export default function App() {
     if (crossTabChannel) {
       crossTabChannel.onmessage = (event: MessageEvent) => {
         if (event.data?.type === "AUTH_LOGIN" && event.data.userId && event.data.userId !== userIdRef.current) {
-          setIsDemoUser(false);
           setUserId(event.data.userId);
           loadUserData(event.data.userId).then(() => {
             setSignedIn(true);
@@ -239,23 +212,10 @@ export default function App() {
         } else if (event.data?.type === "AUTH_LOGOUT") {
           setSignedIn(false);
           setUserId(null);
-          setIsDemoUser(false);
           setIsOnboarded(false);
         }
       };
     }
-
-    // Storage event listener for browsers without BroadcastChannel
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === "valuo_demo_user" && !e.newValue) {
-        setSignedIn(false);
-        setUserId(null);
-        setIsDemoUser(false);
-        setIsOnboarded(false);
-      }
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   // Supabase Realtime: persistent single channel for live tables
@@ -687,30 +647,6 @@ export default function App() {
       }
       return;
     }
-
-    if (isDemoUser) {
-      const randomCode = `VALUO-${Math.floor(100 + Math.random() * 900)}`;
-      const demoSquad: GroupData = {
-        id: `grp-${Date.now()}`,
-        name,
-        code: randomCode,
-        week: getCurrentWeekNumber(),
-        members: [
-          { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: 0, change: 0, estimate: null },
-          ...invitedFriends.map((f, i) => ({
-            id: i + 2,
-            name: f.split(" ")[0],
-            avatar: avatars.camille,
-            points: 0,
-            change: 0,
-            estimate: null,
-          })),
-        ],
-      };
-      setGroup(demoSquad);
-      localStorage.setItem("valuo_demo_squad", JSON.stringify(demoSquad));
-      setNotice(`L'escouade « ${name} » a été créée avec succès ! Code : ${randomCode}`);
-    }
   }
 
   function createGroup(name: string, invitedFriends: string[]) {
@@ -744,22 +680,6 @@ export default function App() {
         setNotice("Code d'escouade introuvable ou escouade déjà complète.");
       }
       return;
-    }
-
-    if (isDemoUser) {
-      const demoSquad: GroupData = {
-        id: `grp-${Date.now()}`,
-        name: `Escouade ${code}`,
-        code,
-        week: getCurrentWeekNumber(),
-        members: [
-          { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: 0, change: 0, estimate: null },
-        ],
-      };
-      setGroup(demoSquad);
-      localStorage.setItem("valuo_demo_squad", JSON.stringify(demoSquad));
-      setNotice(`Tu as rejoint l'escouade ${code} !`);
-      navigate("group");
     }
   }
 
@@ -820,32 +740,6 @@ export default function App() {
         setNotice("Erreur lors de la création de l'escouade. Veuillez réessayer.");
       }
       return;
-    }
-
-    if (isDemoUser) {
-      const randomCode = `VALUO-${Math.floor(100 + Math.random() * 900)}`;
-      const demoSquad: GroupData = {
-        id: `grp-${Date.now()}`,
-        name: squadName,
-        code: randomCode,
-        week: getCurrentWeekNumber(),
-        members: [
-          { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: 0, change: 0, estimate: null },
-        ],
-      };
-      setGroup(demoSquad);
-      localStorage.setItem("valuo_demo_squad", JSON.stringify(demoSquad));
-      saveActiveRecruitmentLocalCache(randomCode, squadName);
-
-      const demoRecruitmentPost = createRecruitmentFeedPostObj(randomCode, squadName);
-
-      setPosts((prev) => {
-        const pinned = prev.filter((p) => p.isPinned);
-        const unpinned = [demoRecruitmentPost, ...prev.filter((p) => !p.isPinned && p.squadCode !== randomCode)];
-        return [...pinned, ...unpinned];
-      });
-      setNotice("Escouade créée ! L'avis de recrutement a été partagé sur le Feed.");
-      navigate("group");
     }
   }
 
@@ -1032,9 +926,9 @@ export default function App() {
 
   async function share(post?: FeedPost) {
     const shareData = {
-      title: post ? `${post.author} · ${todayChallenge.theme}` : "VALUO",
+      title: post ? `${post.author} · ${activeChallenge?.theme || "Défi VALUO"}` : "VALUO",
       text: post
-        ? `Regarde ma photo pour le défi VALUO du jour « ${todayChallenge.theme} » !`
+        ? `Regarde ma photo pour le défi VALUO du jour « ${activeChallenge?.theme || "Défi VALUO"} » !`
         : `Rejoins mon escouade sur VALUO (Code: ${group?.code || "VALUO-789"}) et relève le défi de la semaine !`,
       url: window.location.href,
     };
@@ -1061,27 +955,10 @@ export default function App() {
     }
   }
 
-  async function handleAuthSuccess(identifier?: string, newUid?: string, isTempPassword?: boolean, isDemo?: boolean) {
+  async function handleAuthSuccess(identifier?: string, newUid?: string, isTempPassword?: boolean) {
     setAuthIdentifier(identifier || "");
-    if (newUid) setUserId(newUid);
-
-    if (isDemo) {
-      setIsDemoUser(true);
-      setIsOnboarded(true);
-      setCurrentUser({
-        name: "Visiteur Démo",
-        city: "France",
-        avatar: avatarPresets[0].url,
-        cover: media.camera,
-        bio: "Mode exploration de découverte.",
-        memberSince: "Septembre 2026",
-      });
-      setNotifications([]);
-      setPosts([pinnedAdminPost]);
-      setSignedIn(true);
-    } else if (newUid) {
-      setIsDemoUser(false);
-      localStorage.removeItem("valuo_demo_user");
+    if (newUid) {
+      setUserId(newUid);
       setAuthLoading(true);
 
       const isUserAdmin = Boolean(
@@ -1133,17 +1010,16 @@ export default function App() {
 
   async function handleLogout() {
     await signOutUser();
-    localStorage.removeItem("valuo_demo_user");
     crossTabChannel?.postMessage({ type: "AUTH_LOGOUT" });
     setSignedIn(false);
     setUserId(null);
-    setIsDemoUser(false);
     setIsOnboarded(false);
     setCurrentUser(cleanUserProfile);
     setNotifications([]);
     setFriends([]);
     setGroup(null);
-    setPosts([pinnedAdminPost]);
+    setPosts([]);
+    setMysteryItem(null);
   }
 
   // Smooth loading splash while session initializes
@@ -1268,7 +1144,6 @@ export default function App() {
                 {activeTab === "profile" && (
                   <ProfileView
                     profile={currentUser}
-                    isDemoUser={isDemoUser}
                     onUpdateProfile={updateProfile}
                     onLogout={handleLogout}
                     onInstall={installApp}

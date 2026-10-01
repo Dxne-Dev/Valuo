@@ -52,7 +52,7 @@ export default function GroupView({
   const [joinOpen, setJoinOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
 
-  const [groupName, setGroupName] = useState("Les As du Flair");
+  const [groupName, setGroupName] = useState("");
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [hoveredHistoryIndex, setHoveredHistoryIndex] = useState<number | null>(null);

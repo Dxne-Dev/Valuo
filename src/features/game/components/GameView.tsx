@@ -27,11 +27,25 @@ export default function GameView({ group, currentUser, mysteryItem, onOpenGroup 
 
   const amount = Number(estimate.replace(",", ".")) || 0;
 
-  const itemTitle = mysteryItem?.title || "Vase en faïence à décor floral";
-  const itemImage = mysteryItem?.image || media.mystery;
-  const itemBrief = mysteryItem?.brief || "Hauteur 31 cm. Signature partiellement visible sous la base. Quelques traces du temps, sans éclat majeur.";
-  const itemHint = mysteryItem?.hint || "Une pièce décorative qui a traversé au moins trois générations.";
-  const realPrice = Number(mysteryItem?.realPrice) || 68;
+  if (!mysteryItem) {
+    return (
+      <div className="mx-auto max-w-2xl rounded-3xl border border-[#173f35]/10 bg-white p-12 text-center shadow-sm">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[#e9683a]/10 text-[#e9683a]">
+          <PackageOpen size={32} />
+        </div>
+        <h2 className="mt-6 font-display text-2xl font-bold text-[#173f35]">Aucune Mystery Box active</h2>
+        <p className="mt-2 text-sm text-[#76837c] max-w-md mx-auto leading-relaxed">
+          Le prochain objet mystère sera programmé et activé très prochainement par l'administrateur. Revenez vite pour faire votre estimation !
+        </p>
+      </div>
+    );
+  }
+
+  const itemTitle = mysteryItem.title;
+  const itemImage = mysteryItem.image || media.mystery;
+  const itemBrief = mysteryItem.brief || "Aucune description fournie.";
+  const itemHint = mysteryItem.hint || "Indice à venir.";
+  const realPrice = Number(mysteryItem.realPrice) || 0;
 
   const members = useMemo(() => {
     if (group?.members && group.members.length > 0) {

@@ -421,16 +421,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
               </>
             )}
 
-            {/* Quick Demo Mode: explicitly injects mock data */}
-            <div className="mt-6 border-t border-[#173f35]/10 pt-4 text-center">
-              <button
-                type="button"
-                onClick={() => onAuth("lea@demo.valuo", undefined, false, true)}
-                className="text-xs font-bold text-[#738078] hover:text-[#e9683a] underline underline-offset-2"
-              >
-                Tester en mode Démo rapide (avec données mock)
-              </button>
-            </div>
+
 
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-[#738078]">
               <div className="flex items-center gap-2 rounded-xl bg-white/70 p-2.5 border border-[#173f35]/5">

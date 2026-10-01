@@ -77,7 +77,7 @@ function ChallengeCountdownBadge({ endsAt }: { endsAt?: string }) {
 export type AdminViewProps = {
   currentUserId?: string | null;
   activeChallenge?: ChallengeData | null;
-  mysteryItem: MysteryItemData;
+  mysteryItem?: MysteryItemData | null;
   posts: FeedPost[];
   onChallengeUpdated: (challenge: ChallengeData | null) => void;
   onMysteryUpdated: (item: MysteryItemData) => void;
@@ -201,7 +201,7 @@ export default function AdminView({
   // Mystery Boxes queue state
   const [mysteryBoxesList, setMysteryBoxesList] = useState<MysteryItemData[]>([]);
   const [isMysterySchedulingMode, setIsMysterySchedulingMode] = useState(false);
-  const [mysteryDayNumber, setMysteryDayNumber] = useState(mysteryItem.dayNumber || 1);
+  const [mysteryDayNumber, setMysteryDayNumber] = useState(mysteryItem?.dayNumber || 1);
   const [mysteryStartsAt, setMysteryStartsAt] = useState(() => {
     const today = new Date();
     today.setHours(8, 0, 0, 0);
@@ -216,12 +216,12 @@ export default function AdminView({
   const [savingMystery, setSavingMystery] = useState(false);
 
   // Mystery form state
-  const [mysteryTitle, setMysteryTitle] = useState(mysteryItem.title);
-  const [mysteryImage, setMysteryImage] = useState(mysteryItem.image);
+  const [mysteryTitle, setMysteryTitle] = useState(mysteryItem?.title || "");
+  const [mysteryImage, setMysteryImage] = useState(mysteryItem?.image || "");
   const [mysteryFile, setMysteryFile] = useState<File | null>(null);
-  const [mysteryBrief, setMysteryBrief] = useState(mysteryItem.brief);
-  const [mysteryHint, setMysteryHint] = useState(mysteryItem.hint);
-  const [mysteryRealPrice, setMysteryRealPrice] = useState(String(mysteryItem.realPrice));
+  const [mysteryBrief, setMysteryBrief] = useState(mysteryItem?.brief || "");
+  const [mysteryHint, setMysteryHint] = useState(mysteryItem?.hint || "");
+  const [mysteryRealPrice, setMysteryRealPrice] = useState(String(mysteryItem?.realPrice || ""));
 
   async function loadMysteryBoxes() {
     const list = await fetchAllMysteryBoxesList();
@@ -230,7 +230,7 @@ export default function AdminView({
 
   useEffect(() => {
     loadMysteryBoxes();
-  }, [mysteryItem.id, tab]);
+  }, [mysteryItem?.id, tab]);
 
   useEffect(() => {
     if (mysteryItem && !editingMysteryId) {
@@ -551,13 +551,13 @@ export default function AdminView({
   // Handle Mystery Box CRUD & Scheduling
   function resetMysteryForm() {
     setEditingMysteryId(null);
-    setMysteryTitle(mysteryItem.title || "");
-    setMysteryImage(mysteryItem.image || media.mystery);
+    setMysteryTitle(mysteryItem?.title || "");
+    setMysteryImage(mysteryItem?.image || "");
     setMysteryFile(null);
-    setMysteryBrief(mysteryItem.brief || "");
-    setMysteryHint(mysteryItem.hint || "");
-    setMysteryRealPrice(String(mysteryItem.realPrice || 50));
-    setMysteryDayNumber(mysteryItem.dayNumber || 1);
+    setMysteryBrief(mysteryItem?.brief || "");
+    setMysteryHint(mysteryItem?.hint || "");
+    setMysteryRealPrice(String(mysteryItem?.realPrice || ""));
+    setMysteryDayNumber(mysteryItem?.dayNumber || 1);
     setIsMysterySchedulingMode(false);
   }
 
@@ -931,12 +931,18 @@ export default function AdminView({
             <div className="rounded-[26px] border border-[#173f35]/8 bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-[#e9683a]">Mystery Box du Jour</span>
-                <span className="rounded-full bg-[#f3c969]/30 px-2.5 py-0.5 text-[10px] font-bold text-[#173f35]">
-                  {mysteryItem.realPrice} €
-                </span>
+                {mysteryItem && (
+                  <span className="rounded-full bg-[#f3c969]/30 px-2.5 py-0.5 text-[10px] font-bold text-[#173f35]">
+                    {mysteryItem.realPrice} €
+                  </span>
+                )}
               </div>
-              <h3 className="mt-2 font-display text-xl font-bold text-[#173f35]">{mysteryItem.title}</h3>
-              <p className="mt-1 text-xs text-[#6e7d75] leading-relaxed">{mysteryItem.brief}</p>
+              <h3 className="mt-2 font-display text-xl font-bold text-[#173f35]">
+                {mysteryItem?.title || "Aucune box active"}
+              </h3>
+              <p className="mt-1 text-xs text-[#6e7d75] leading-relaxed">
+                {mysteryItem?.brief || "Programmez ou activez un objet mystère pour les joueurs."}
+              </p>
               <div className="mt-4 flex items-center gap-3 pt-3 border-t border-[#173f35]/6">
                 <button
                   type="button"
@@ -1539,58 +1545,70 @@ export default function AdminView({
       {tab === "mystery" && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
           {/* 1. CARTE DE L'OBJET MYSTÈRE ACTUELLEMENT EN JEU */}
-          <div className="overflow-hidden rounded-[28px] border-2 border-[#f3c969]/60 bg-gradient-to-br from-[#fefbf3] via-white to-[#fbf8f1] p-6 sm:p-7 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="flex h-2.5 w-2.5 rounded-full bg-[#e9683a] animate-ping" />
-                <span className="text-xs font-extrabold uppercase tracking-wider text-[#e9683a]">
-                  Mystery Box du Jour (Session 08h00 ➔ 20h00)
-                </span>
-                <span className="rounded-full bg-[#173f35] px-2.5 py-0.5 text-[10px] font-bold text-[#f3c969]">
-                  Jour {mysteryItem.dayNumber || 4} / 6
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <ChallengeCountdownBadge endsAt={mysteryItem.ends_at} />
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800 border border-emerald-300">
-                  Prix réel : {mysteryItem.realPrice} €
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-5 flex flex-col md:flex-row gap-6 items-start md:items-center">
-              <img
-                src={mysteryItem.image}
-                alt={mysteryItem.title}
-                className="h-28 w-28 rounded-2xl object-cover border-2 border-[#173f35]/15 shadow-md shrink-0"
-              />
-              <div className="flex-1">
-                <h3 className="font-display text-2xl font-bold text-[#173f35]">{mysteryItem.title}</h3>
-                <p className="mt-1 text-xs text-[#53655b] leading-relaxed line-clamp-2">{mysteryItem.brief}</p>
-                <div className="mt-2.5 flex items-center gap-2 text-xs font-bold text-[#e9683a]">
-                  <Sparkles size={13} />
-                  <span>Indice : « {mysteryItem.hint} »</span>
+          {mysteryItem ? (
+            <div className="overflow-hidden rounded-[28px] border-2 border-[#f3c969]/60 bg-gradient-to-br from-[#fefbf3] via-white to-[#fbf8f1] p-6 sm:p-7 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-2.5 w-2.5 rounded-full bg-[#e9683a] animate-ping" />
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-[#e9683a]">
+                    Mystery Box du Jour (Session 08h00 ➔ 20h00)
+                  </span>
+                  <span className="rounded-full bg-[#173f35] px-2.5 py-0.5 text-[10px] font-bold text-[#f3c969]">
+                    Jour {mysteryItem.dayNumber || 1} / 6
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ChallengeCountdownBadge endsAt={mysteryItem.ends_at} />
+                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800 border border-emerald-300">
+                    Prix réel : {mysteryItem.realPrice} €
+                  </span>
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0 w-full md:w-auto">
-                <button
-                  type="button"
-                  onClick={() => mysteryItem.id && handleRevealMysteryBox(mysteryItem.id)}
-                  className="flex items-center justify-center gap-1.5 rounded-full bg-[#e9683a] px-4 py-2.5 text-xs font-extrabold text-white shadow-md transition hover:bg-[#d9582d]"
-                >
-                  <Sparkles size={14} /> Révéler le prix maintenant
-                </button>
-                <button
-                  type="button"
-                  onClick={() => startEditingMysteryBox(mysteryItem)}
-                  className="flex items-center justify-center gap-1.5 rounded-full border border-[#173f35]/15 bg-white px-4 py-2.5 text-xs font-bold text-[#173f35] shadow-sm transition hover:bg-[#fbf8f1]"
-                >
-                  <Edit3 size={14} /> Modifier cet objet
-                </button>
+              <div className="mt-5 flex flex-col md:flex-row gap-6 items-start md:items-center">
+                {mysteryItem.image && (
+                  <img
+                    src={mysteryItem.image}
+                    alt={mysteryItem.title}
+                    className="h-28 w-28 rounded-2xl object-cover border-2 border-[#173f35]/15 shadow-md shrink-0"
+                  />
+                )}
+                <div className="flex-1">
+                  <h3 className="font-display text-2xl font-bold text-[#173f35]">{mysteryItem.title}</h3>
+                  <p className="mt-1 text-xs text-[#53655b] leading-relaxed line-clamp-2">{mysteryItem.brief}</p>
+                  <div className="mt-2.5 flex items-center gap-2 text-xs font-bold text-[#e9683a]">
+                    <Sparkles size={13} />
+                    <span>Indice : « {mysteryItem.hint} »</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0 w-full md:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => mysteryItem.id && handleRevealMysteryBox(mysteryItem.id)}
+                    className="flex items-center justify-center gap-1.5 rounded-full bg-[#e9683a] px-4 py-2.5 text-xs font-extrabold text-white shadow-md transition hover:bg-[#d9582d]"
+                  >
+                    <Sparkles size={14} /> Révéler le prix maintenant
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startEditingMysteryBox(mysteryItem)}
+                    className="flex items-center justify-center gap-1.5 rounded-full border border-[#173f35]/15 bg-white px-4 py-2.5 text-xs font-bold text-[#173f35] shadow-sm transition hover:bg-[#fbf8f1]"
+                  >
+                    <Edit3 size={14} /> Modifier cet objet
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-[28px] border-2 border-dashed border-[#173f35]/15 bg-white p-8 text-center">
+              <PackageOpen size={32} className="mx-auto text-[#e9683a]" />
+              <h3 className="mt-3 font-display text-xl font-bold text-[#173f35]">Aucune Mystery Box active en ce moment</h3>
+              <p className="mt-1 text-xs text-[#6e7d75] max-w-md mx-auto">
+                Utilisez le formulaire ci-dessous pour créer ou programmer l'objet mystère du jour pour les joueurs.
+              </p>
+            </div>
+          )}
 
           {/* 2. FORMULAIRE DE CONFIGURATION & PROGRAMMATION */}
           <div className="rounded-[28px] bg-white p-6 sm:p-8 shadow-sm border border-[#173f35]/8">

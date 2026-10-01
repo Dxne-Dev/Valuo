@@ -77,13 +77,6 @@ export type GroupData = {
   isLeader?: boolean;
 };
 
-export const todayChallenge = {
-  theme: "Une touche de rouge",
-  date: "Jeudi 17 septembre",
-  brief: "Photographie un objet rouge qui a déjà vécu. Un détail, une texture, une histoire — avant minuit.",
-  remaining: "6 h 24",
-};
-
 export const media = {
   mystery:
     "https://images.pexels.com/photos/11430230/pexels-photo-11430230.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1400&w=1000",
@@ -130,18 +123,3 @@ export const avatarPresets = [
   { id: "ines", label: "Inès", url: avatars.ines },
   { id: "hugo", label: "Hugo", url: avatars.hugo },
 ];
-
-export const pinnedAdminPost: FeedPost = {
-  id: 999,
-  author: "Dxne - Admin",
-  city: "Défi Officiel",
-  avatar: "https://images.pexels.com/photos/3861969/pexels-photo-3861969.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=300&w=300",
-  photo: media.redPhone,
-  caption: "Défi du jour : « Une touche de rouge ». Repérez un objet ou un détail captivant qui porte cette couleur. Les 3 photos les plus likées rapportent un bonus de points à votre escouade !",
-  time: "Épinglé · 08:00",
-  likes: 0,
-  liked: false,
-  isPinned: true,
-  isOfficial: true,
-  comments: [],
-};
