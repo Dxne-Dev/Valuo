@@ -31,90 +31,105 @@ export async function getCurrentSession() {
   return data.session;
 }
 
-export async function registerWithMagicLink(email: string, name?: string) {
+import { sendValuoWelcomeEmail } from "./emailService";
+
+export async function registerWithTemporaryPassword(email: string, name?: string) {
   const cleanEmail = email.trim().toLowerCase();
   
   // Rate limiting check
-  const rateLimit = checkRateLimit(`register_${cleanEmail}`, 5, 60000);
+  const rateLimit = checkRateLimit(`register_${cleanEmail}`, 3, 60000);
   if (!rateLimit.allowed) {
     return {
       data: null,
       error: { message: `Trop de tentatives. Réessayez dans ${rateLimit.retryAfterSeconds}s.` },
+      tempPassword: "",
       isMock: false,
     };
   }
 
+  const tempPassword = generateSecureTemporaryPassword();
   const userName = sanitizeInput(name?.trim() || splitEmail(cleanEmail));
   const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const activationUrl = `${origin}?mode=login&email=${encodeURIComponent(cleanEmail)}`;
 
-  if (!isSupabaseConfigured) {
-    return { data: null, error: null, isMock: true };
-  }
+  if (isSupabaseConfigured) {
+    // 1. Verify if email already exists in auth.users or profiles
+    try {
+      const { data: exists } = await supabase.rpc("check_email_exists", { p_email: cleanEmail });
+      if (exists) {
+        return {
+          data: null,
+          error: { message: "Cette adresse email est déjà associée à un compte. Veuillez vous connecter." },
+          tempPassword: "",
+          isMock: false,
+        };
+      }
+    } catch {
+      // Fallback direct check on profiles
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", cleanEmail)
+        .maybeSingle();
 
-  // 1. Check if email already exists in Supabase
-  try {
-    const { data: existsRpc } = await supabase.rpc("check_email_exists", { p_email: cleanEmail });
-    if (existsRpc === true) {
-      return {
-        data: null,
-        error: { message: "Cette adresse email est déjà associée à un compte. Veuillez vous connecter." },
-        isMock: false,
-      };
+      if (profile) {
+        return {
+          data: null,
+          error: { message: "Cette adresse email est déjà associée à un compte. Veuillez vous connecter." },
+          tempPassword: "",
+          isMock: false,
+        };
+      }
     }
 
-    const { data: existingProfile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("email", cleanEmail)
-      .maybeSingle();
-
-    if (existingProfile) {
-      return {
-        data: null,
-        error: { message: "Cette adresse email est déjà associée à un compte. Veuillez vous connecter." },
-        isMock: false,
-      };
-    }
-  } catch (err) {
-    console.warn("Could not check email uniqueness:", err);
-  }
-
-  // 2. Trigger native Supabase 1-click Magic Link / Signup Email
-  const { data, error } = await supabase.auth.signInWithOtp({
-    email: cleanEmail,
-    options: {
-      data: {
-        name: userName,
-        needs_password_change: false,
+    // 2. Perform Supabase Sign Up
+    const { data, error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: tempPassword,
+      options: {
+        data: {
+          name: userName,
+          needs_password_change: true,
+          temp_password_created_at: Date.now(),
+        },
+        emailRedirectTo: activationUrl,
       },
-      emailRedirectTo: origin,
-    },
-  });
+    });
 
-  if (error) {
-    return { data: null, error, isMock: false };
+    if (error) {
+      return { data: null, error, tempPassword: "", isMock: false };
+    }
+
+    // Supabase anti-enumeration check (if user exists, identities is empty)
+    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      return {
+        data: null,
+        error: { message: "Cette adresse email est déjà associée à un compte. Veuillez vous connecter." },
+        tempPassword: "",
+        isMock: false,
+      };
+    }
+
+    // 3. Dispatch welcome email ONLY when user creation is confirmed
+    await sendValuoWelcomeEmail({
+      email: cleanEmail,
+      name: userName,
+      tempPassword,
+      activationUrl,
+    });
+
+    return { data, error: null, tempPassword, isMock: false };
   }
 
-  return { data, error: null, isMock: false };
-}
-
-// Backward compatibility alias
-export const registerWithTemporaryPassword = registerWithMagicLink;
-
-export async function signInWithMagicLink(email: string) {
-  const cleanEmail = email.trim().toLowerCase();
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-
-  if (!isSupabaseConfigured) return { data: null, error: null, isMock: true };
-
-  const { data, error } = await supabase.auth.signInWithOtp({
+  // Local simulation fallback
+  await sendValuoWelcomeEmail({
     email: cleanEmail,
-    options: {
-      emailRedirectTo: origin,
-    },
+    name: userName,
+    tempPassword,
+    activationUrl,
   });
 
-  return { data, error, isMock: false };
+  return { data: null, error: null, tempPassword, isMock: true };
 }
 
 export async function signInWithPassword(email: string, password: string) {
@@ -736,6 +751,8 @@ export type MysteryItemData = {
 };
 
 export async function fetchMysteryItem(): Promise<MysteryItemData> {
+  const defaultStartsAt = new Date();
+  defaultStartsAt.setHours(8, 0, 0, 0);
   const defaultEndsAt = new Date();
   defaultEndsAt.setHours(20, 0, 0, 0);
 
@@ -746,8 +763,9 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
     hint: "Une pièce décorative qui a traversé au moins trois générations.",
     realPrice: 68,
     dayNumber: 4,
-    status: "active",
+    starts_at: defaultStartsAt.toISOString(),
     ends_at: defaultEndsAt.toISOString(),
+    status: "active",
   };
 
   if (isSupabaseConfigured) {
@@ -793,7 +811,10 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
       }
 
       if (chosen) {
-        const endsAtTime = chosen.ends_at ? new Date(chosen.ends_at).getTime() : defaultEndsAt.getTime();
+        const today20h = new Date();
+        today20h.setHours(20, 0, 0, 0);
+        const endsAtIso = chosen.ends_at || today20h.toISOString();
+        const endsAtTime = new Date(endsAtIso).getTime();
         const isRevealed = Boolean(endsAtTime > 0 && Date.now() >= endsAtTime) || chosen.status === "revealed";
 
         const item: MysteryItemData = {
@@ -805,7 +826,7 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
           realPrice: Number(chosen.real_price) || 0,
           dayNumber: chosen.day_number || 1,
           starts_at: chosen.starts_at || chosen.created_at,
-          ends_at: chosen.ends_at || defaultEndsAt.toISOString(),
+          ends_at: endsAtIso,
           status: isRevealed ? "revealed" : (chosen.status || "active"),
           created_at: chosen.created_at,
         };
@@ -1357,7 +1378,12 @@ export async function fetchUserSquad(userId: string): Promise<GroupData | null> 
         is_npc,
         points,
         rank_change,
-        current_estimate
+        current_estimate,
+        profiles (
+          id,
+          name,
+          avatar_url
+        )
       )
     `)
     .eq("id", memberEntry.squad_id)
@@ -1365,39 +1391,33 @@ export async function fetchUserSquad(userId: string): Promise<GroupData | null> 
 
   if (!squad) return null;
 
-  // Retrieve user profiles for all non-NPC members
-  const realUserIds = (squad.squad_members || [])
-    .filter((m: any) => !m.is_npc && m.user_id)
-    .map((m: any) => m.user_id);
+  const rawMembers = squad.squad_members || [];
+  const userIds = rawMembers.filter((m: any) => !m.is_npc && m.user_id).map((m: any) => m.user_id);
 
-  let profileMap: Record<string, { name: string; avatar: string }> = {};
-  if (realUserIds.length > 0) {
+  let profilesMap: Record<string, any> = {};
+  if (userIds.length > 0) {
     try {
       const { data: profs } = await supabase
         .from("profiles")
         .select("id, name, avatar_url")
-        .in("id", realUserIds);
-
+        .in("id", userIds);
       if (profs) {
-        profs.forEach((p: any) => {
-          profileMap[p.id] = {
-            name: p.name || "Joueur",
-            avatar: p.avatar_url || avatars.lea,
-          };
+        profs.forEach((p) => {
+          profilesMap[p.id] = p;
         });
       }
-    } catch (e) {
-      console.warn("Could not batch load profiles:", e);
+    } catch (profErr) {
+      console.warn("Could not fetch extra profile details:", profErr);
     }
   }
 
-  const members: GroupMember[] = (squad.squad_members || []).map((m: any, idx: number) => {
-    const prof = m.user_id ? profileMap[m.user_id] : null;
+  const members: GroupMember[] = rawMembers.map((m: any, idx: number) => {
+    const prof = m.profiles || profilesMap[m.user_id];
     return {
       id: idx + 1,
-      userId: m.user_id,
-      name: m.is_npc ? (m.npc_name || `Rival ${idx + 1}`) : (prof?.name?.split(" ")[0] || "Membre"),
-      avatar: m.is_npc ? (m.npc_avatar || avatars.lea) : (prof?.avatar || avatars.lea),
+      userId: m.user_id || undefined,
+      name: m.is_npc ? m.npc_name : (prof?.name?.split(" ")[0] || "Membre"),
+      avatar: m.is_npc ? m.npc_avatar : (prof?.avatar_url || avatars.lea),
       points: m.points || 0,
       change: m.rank_change || 0,
       estimate: m.current_estimate ? Number(m.current_estimate) : null,
@@ -1631,24 +1651,24 @@ export async function joinSquadByCode(userId: string, code: string): Promise<Gro
 
   const cleanCode = code.trim().toUpperCase();
 
+  // 1. Try atomic security definer RPC
   try {
-    // 1. Try secure RPC function
     const { data: rpcRes, error: rpcErr } = await supabase.rpc("join_squad_by_code", {
       p_code: cleanCode,
     });
 
-    if (!rpcErr && rpcRes && rpcRes.success) {
+    if (!rpcErr && rpcRes?.success) {
       return await fetchUserSquad(userId);
     }
   } catch (rpcEx) {
-    console.warn("RPC join_squad_by_code exception, using direct fallback:", rpcEx);
+    console.warn("join_squad_by_code RPC attempt error:", rpcEx);
   }
 
   // 2. Direct fallback
   const { data: squad } = await supabase
     .from("squads")
     .select("id")
-    .ilike("code", cleanCode)
+    .eq("code", cleanCode)
     .maybeSingle();
 
   if (!squad) return null;

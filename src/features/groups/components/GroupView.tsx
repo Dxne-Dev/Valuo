@@ -299,22 +299,18 @@ export default function GroupView({
                     </div>
                     <div className="overflow-hidden rounded-[26px] border border-[#173f35]/8 bg-white">
                       {group.members.map((member, index) => {
-                        const isCurrentUser = Boolean(
-                          (member.userId && currentUser?.id && member.userId === currentUser.id) ||
-                          (member.name && currentUser?.name && (
-                            member.name.toLowerCase() === currentUser.name.toLowerCase() ||
-                            member.name.toLowerCase() === currentUser.name.split(" ")[0].toLowerCase()
-                          ))
-                        );
+                        const isCurrentUser = member.userId
+                          ? member.userId === currentUser?.id
+                          : Boolean(currentUser?.name && member.name.toLowerCase() === currentUser.name.split(" ")[0].toLowerCase());
 
                         return (
                           <motion.div
-                            key={member.id || member.userId || `mem-${index}`}
+                            key={member.userId || member.id}
                             initial={{ opacity: 0, x: -18 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: index * 0.08 }}
                             className={`relative flex items-center gap-4 border-b border-[#173f35]/8 p-4 last:border-0 sm:p-5 ${
-                              isCurrentUser ? "bg-[#fff8f5]" : (group.members.length === 4 && index === group.members.length - 1 ? "bg-[#fff5f0]" : "")
+                              group.members.length === 4 && index === group.members.length - 1 ? "bg-[#fff5f0]" : ""
                             }`}
                           >
                             <span
@@ -346,7 +342,7 @@ export default function GroupView({
                               {member.points}
                               <span className="ml-1 font-sans text-[10px] font-bold uppercase text-[#8a958f]">pts</span>
                             </p>
-                            {isCurrentUser && (
+                            {group.members.length === 4 && index === group.members.length - 1 && (
                               <span className="absolute bottom-0 left-0 top-0 w-1 bg-[#e9683a]" />
                             )}
                           </motion.div>

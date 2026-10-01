@@ -1,10 +1,11 @@
 -- ============================================================================
--- VALUO SQUAD JOINING RPC & EMAIL UNIQUENESS CHECK
+-- VALUO: SQUAD JOINING RPC, EMAIL EXISTENCE CHECK & RLS POLICIES
 -- File: supabase/migrations/20261001000003_squad_joining_rpc_and_email_check.sql
 -- Date: 2026-10-01
 -- ============================================================================
 
--- 1. Function to check if an email already exists in auth.users or public.profiles
+-- 1. Function: check_email_exists
+-- Securely checks if an email is already registered in auth.users or profiles
 CREATE OR REPLACE FUNCTION public.check_email_exists(p_email TEXT)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -13,33 +14,24 @@ SET search_path = public, auth
 AS $$
 DECLARE
     v_clean_email TEXT := LOWER(TRIM(p_email));
-    v_exists BOOLEAN := FALSE;
 BEGIN
-    -- Check public.profiles
-    SELECT EXISTS (
-        SELECT 1 FROM public.profiles 
-        WHERE LOWER(TRIM(email)) = v_clean_email
-    ) INTO v_exists;
-
-    IF v_exists THEN
-        RETURN TRUE;
+    IF EXISTS (SELECT 1 FROM auth.users WHERE LOWER(email) = v_clean_email) THEN
+        RETURN true;
     END IF;
 
-    -- Check auth.users
-    SELECT EXISTS (
-        SELECT 1 FROM auth.users 
-        WHERE LOWER(TRIM(email)) = v_clean_email
-    ) INTO v_exists;
+    IF EXISTS (SELECT 1 FROM public.profiles WHERE LOWER(email) = v_clean_email) THEN
+        RETURN true;
+    END IF;
 
-    RETURN v_exists;
+    RETURN false;
 END;
 $$;
 
 REVOKE EXECUTE ON FUNCTION public.check_email_exists(TEXT) FROM public;
-GRANT EXECUTE ON FUNCTION public.check_email_exists(TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.check_email_exists(TEXT) TO anon, authenticated;
 
-
--- 2. Secure RPC to join a squad by code (handles leaving previous squad and capacity check)
+-- 2. Function: join_squad_by_code
+-- Securely joins an existing squad by its code without RLS permission hurdles
 CREATE OR REPLACE FUNCTION public.join_squad_by_code(p_code TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -48,53 +40,41 @@ SET search_path = public, auth
 AS $$
 DECLARE
     v_user_id UUID := auth.uid();
-    v_squad RECORD;
+    v_squad_id UUID;
+    v_squad_name TEXT;
     v_member_count INTEGER;
-    v_clean_code TEXT := UPPER(TRIM(p_code));
 BEGIN
     IF v_user_id IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'message', 'Non authentifié');
+        RETURN jsonb_build_object('success', false, 'message', 'Utilisateur non authentifié');
     END IF;
 
-    -- 1. Find squad
-    SELECT id, name, code, created_by, status INTO v_squad
+    -- Find squad
+    SELECT id, name INTO v_squad_id, v_squad_name
     FROM public.squads
-    WHERE UPPER(TRIM(code)) = v_clean_code
-    LIMIT 1;
+    WHERE UPPER(TRIM(code)) = UPPER(TRIM(p_code));
 
-    IF v_squad.id IS NULL THEN
+    IF NOT FOUND THEN
         RETURN jsonb_build_object('success', false, 'message', 'Code d''escouade introuvable');
     END IF;
 
-    -- 2. Check current member count
-    SELECT COUNT(*) INTO v_member_count
-    FROM public.squad_members
-    WHERE squad_id = v_squad.id;
-
-    -- If user is already in this squad
-    IF EXISTS (
-        SELECT 1 FROM public.squad_members 
-        WHERE squad_id = v_squad.id AND user_id = v_user_id
-    ) THEN
-        RETURN jsonb_build_object(
-            'success', true, 
-            'message', 'Déjà membre de cette escouade',
-            'squad_id', v_squad.id,
-            'squad_name', v_squad.name,
-            'squad_code', v_squad.code
-        );
+    -- Check if user is already a member
+    IF EXISTS (SELECT 1 FROM public.squad_members WHERE squad_id = v_squad_id AND user_id = v_user_id) THEN
+        RETURN jsonb_build_object('success', true, 'squad_id', v_squad_id, 'message', 'Déjà membre de cette escouade');
     END IF;
 
-    -- Check maximum 4 members capacity
+    -- Check member count (max 4)
+    SELECT COUNT(*) INTO v_member_count
+    FROM public.squad_members
+    WHERE squad_id = v_squad_id;
+
     IF v_member_count >= 4 THEN
         RETURN jsonb_build_object('success', false, 'message', 'Cette escouade est déjà complète (4/4)');
     END IF;
 
-    -- 3. Leave any previous squad
-    DELETE FROM public.squad_members
-    WHERE user_id = v_user_id;
+    -- Remove user from any existing squad
+    DELETE FROM public.squad_members WHERE user_id = v_user_id;
 
-    -- 4. Insert into target squad
+    -- Insert user into new squad
     INSERT INTO public.squad_members (
         squad_id,
         user_id,
@@ -102,7 +82,7 @@ BEGIN
         rank_change,
         is_npc
     ) VALUES (
-        v_squad.id,
+        v_squad_id,
         v_user_id,
         0,
         0,
@@ -111,25 +91,39 @@ BEGIN
 
     RETURN jsonb_build_object(
         'success', true,
-        'message', 'Escouade rejointe avec succès',
-        'squad_id', v_squad.id,
-        'squad_name', v_squad.name,
-        'squad_code', v_squad.code
+        'squad_id', v_squad_id,
+        'squad_name', v_squad_name,
+        'message', 'Escouade rejointe avec succès'
     );
 END;
 $$;
 
 REVOKE EXECUTE ON FUNCTION public.join_squad_by_code(TEXT) FROM public;
-GRANT EXECUTE ON FUNCTION public.join_squad_by_code(TEXT) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.join_squad_by_code(TEXT) TO authenticated;
 
-
--- 3. Ensure RLS policies allow SELECT on squads by code for all authenticated users
+-- 3. Ensure RLS policies allow reading squads and squad members
+ALTER TABLE public.squads ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Squads readable by all authenticated" ON public.squads;
 CREATE POLICY "Squads readable by all authenticated"
-    ON public.squads FOR SELECT TO authenticated
-    USING (true);
+    ON public.squads FOR SELECT TO authenticated USING (true);
 
+ALTER TABLE public.squad_members ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Squad members readable by all authenticated" ON public.squad_members;
 CREATE POLICY "Squad members readable by all authenticated"
-    ON public.squad_members FOR SELECT TO authenticated
-    USING (true);
+    ON public.squad_members FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Authenticated users can join squads" ON public.squad_members;
+CREATE POLICY "Authenticated users can join squads"
+    ON public.squad_members FOR INSERT TO authenticated
+    WITH CHECK (auth.uid() = user_id OR is_npc = true);
+
+DROP POLICY IF EXISTS "Users can leave squads" ON public.squad_members;
+CREATE POLICY "Users can leave squads"
+    ON public.squad_members FOR DELETE TO authenticated
+    USING (auth.uid() = user_id OR is_npc = true);
+
+DROP POLICY IF EXISTS "Users can update own squad member entry" ON public.squad_members;
+CREATE POLICY "Users can update own squad member entry"
+    ON public.squad_members FOR UPDATE TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);

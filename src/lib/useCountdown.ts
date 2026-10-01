@@ -15,12 +15,13 @@ export type CountdownResult = {
 export function calculateTimeRemaining(targetIsoDate?: string | null): CountdownResult {
   let targetTime: number;
 
-  if (!targetIsoDate) {
-    const today20h = new Date();
-    today20h.setHours(20, 0, 0, 0);
-    targetTime = today20h.getTime();
-  } else {
+  if (targetIsoDate) {
     targetTime = new Date(targetIsoDate).getTime();
+  } else {
+    // Default fallback: Today at 20:00:00 local time
+    const default20h = new Date();
+    default20h.setHours(20, 0, 0, 0);
+    targetTime = default20h.getTime();
   }
 
   const now = Date.now();
