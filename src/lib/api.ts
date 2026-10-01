@@ -1782,10 +1782,57 @@ export async function joinSquadByCode(userId: string, code: string): Promise<Gro
     user_id: userId,
     points: 0,
     rank_change: 0,
-    is_npc: false,
   });
 
   return await fetchUserSquad(userId);
+}
+
+export async function submitSquadEstimate(
+  userId: string,
+  squadId: string,
+  amount: number,
+  mysteryBoxId?: string,
+): Promise<boolean> {
+  if (!isSupabaseConfigured || !userId || !squadId) return false;
+
+  try {
+    // 1. Update current_estimate on squad_members for active weekly rankings
+    const { error: smErr } = await supabase
+      .from("squad_members")
+      .update({ current_estimate: amount })
+      .match({ squad_id: squadId, user_id: userId });
+
+    if (smErr) {
+      console.warn("Error updating squad_members current_estimate:", smErr);
+    }
+
+    // 2. Insert into box_estimates if mysteryBoxId is provided
+    if (mysteryBoxId) {
+      const { data: memberEntry } = await supabase
+        .from("squad_members")
+        .select("id")
+        .match({ squad_id: squadId, user_id: userId })
+        .maybeSingle();
+
+      if (memberEntry?.id) {
+        await supabase.from("box_estimates").upsert(
+          {
+            mystery_box_id: mysteryBoxId,
+            squad_id: squadId,
+            squad_member_id: memberEntry.id,
+            user_id: userId,
+            estimated_price: amount,
+          },
+          { onConflict: "mystery_box_id, squad_member_id" }
+        );
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error("submitSquadEstimate error:", err);
+    return false;
+  }
 }
 
 // ============================================================================

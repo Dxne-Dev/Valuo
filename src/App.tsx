@@ -53,6 +53,7 @@ import {
   saveActiveRecruitmentLocalCache,
   saveUserProfile,
   signOutUser,
+  submitSquadEstimate,
   toggleFriendshipInDb,
   togglePostLike,
 } from "./lib/api";
@@ -1111,6 +1112,18 @@ export default function App() {
                     currentUser={currentUser}
                     mysteryItem={mysteryItem}
                     onOpenGroup={() => navigate("group")}
+                    onSubmitEstimate={async (amount) => {
+                      if (!userId || !group?.id) return;
+                      await submitSquadEstimate(
+                        userId,
+                        group.id,
+                        amount,
+                        mysteryItem?.id ? String(mysteryItem.id) : undefined,
+                      );
+                      const updated = await fetchUserSquad(userId);
+                      if (updated) setGroup(updated);
+                      setNotice(`Ton estimation de ${amount} € a été transmise à ton escouade !`);
+                    }}
                   />
                 )}
                 {activeTab === "group" && (

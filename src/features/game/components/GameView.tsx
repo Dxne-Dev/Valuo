@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Check, Clock, Edit2, Info, Lock, PackageOpen, RotateCcw, Sparkles, Timer, Trophy } from "lucide-react";
+import { ArrowLeft, Check, Clock, Edit2, Info, Lock, PackageOpen, RotateCcw, Sparkles, Timer, Trophy, UsersRound } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { type GroupData, media, type UserProfile } from "@/data";
 import { computeRankings } from "../services/gameService";
@@ -11,9 +11,10 @@ export type GameViewProps = {
   currentUser?: UserProfile;
   mysteryItem?: MysteryItemData | null;
   onOpenGroup: () => void;
+  onSubmitEstimate?: (amount: number) => Promise<void> | void;
 };
 
-export default function GameView({ group, currentUser, mysteryItem, onOpenGroup }: GameViewProps) {
+export default function GameView({ group, mysteryItem, onOpenGroup, onSubmitEstimate }: GameViewProps) {
   const [estimate, setEstimate] = useState(() => {
     return localStorage.getItem("valuo_user_estimate") || "";
   });
@@ -51,27 +52,23 @@ export default function GameView({ group, currentUser, mysteryItem, onOpenGroup 
     if (group?.members && group.members.length > 0) {
       return group.members;
     }
-    return [
-      {
-        id: 1,
-        name: currentUser?.name?.split(" ")[0] || "Moi",
-        avatar: currentUser?.avatar || "https://images.pexels.com/photos/14842170/pexels-photo-14842170.jpeg",
-        points: 0,
-        change: 0,
-        estimate: amount || null,
-      },
-    ];
-  }, [group, currentUser, amount]);
+    return [];
+  }, [group]);
 
   const { results, userRank, earned } = useMemo(() => {
     return computeRankings(members, amount || realPrice, realPrice);
   }, [members, amount, realPrice]);
 
-  function submitEstimate(event: FormEvent) {
+  async function submitEstimate(event: FormEvent) {
     event.preventDefault();
+    if (!group) {
+      onOpenGroup();
+      return;
+    }
     if (amount > 0) {
       setHasSubmitted(true);
       localStorage.setItem("valuo_user_estimate", String(amount));
+      await onSubmitEstimate?.(amount);
     }
   }
 
@@ -141,8 +138,40 @@ export default function GameView({ group, currentUser, mysteryItem, onOpenGroup 
 
               <div className="my-7 h-px bg-[#173f35]/10" />
 
-              {!hasSubmitted ? (
+              {!group ? (
+                <div className="rounded-3xl border-2 border-dashed border-[#e9683a]/30 bg-[#fff8f5] p-7 text-center">
+                  <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#e9683a] text-white shadow-lg shadow-[#e9683a]/25">
+                    <UsersRound size={26} />
+                  </div>
+                  <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-[#e9683a]/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-[#e9683a]">
+                    <Lock size={12} /> Escouade requise
+                  </span>
+                  <h3 className="mt-3 font-display text-2xl font-bold text-[#173f35]">
+                    Rejoins une escouade pour estimer
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-[#68766e] max-w-sm mx-auto">
+                    Pour participer au duel de la Mystery Box et marquer des points, tu dois obligatoirement faire partie d'une escouade (créer une escouade privée ou rejoindre via le matchmaking).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onOpenGroup}
+                    className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#173f35] py-4 text-xs font-extrabold text-white transition hover:bg-[#245b4c] shadow-lg shadow-[#173f35]/20 hover:-translate-y-0.5"
+                  >
+                    <Sparkles size={15} className="text-[#f3c969]" />
+                    Créer ou rejoindre une escouade
+                  </button>
+                </div>
+              ) : !hasSubmitted ? (
                 <form onSubmit={submitEstimate}>
+                  <div className="mb-4 flex items-center justify-between rounded-xl bg-[#173f35]/5 px-3.5 py-2">
+                    <span className="text-xs font-bold text-[#173f35] flex items-center gap-1.5">
+                      <UsersRound size={13} className="text-[#e9683a]" /> Escouade active :
+                    </span>
+                    <span className="text-xs font-black text-[#e9683a]">
+                      {group.name}
+                    </span>
+                  </div>
+
                   <label htmlFor="estimate" className="text-sm font-extrabold text-[#173f35]">Ton estimation secrète</label>
                   <div className="mt-3 flex items-center rounded-2xl border-2 border-[#173f35]/15 bg-[#fbf8f1] px-5 transition focus-within:border-[#e9683a] focus-within:ring-4 focus-within:ring-[#e9683a]/10">
                     <input
