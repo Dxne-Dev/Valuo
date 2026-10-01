@@ -13,18 +13,16 @@ export type CountdownResult = {
  * Calculates countdown details given an ISO date string or timestamp.
  */
 export function calculateTimeRemaining(targetIsoDate?: string | null): CountdownResult {
+  let targetTime: number;
+
   if (!targetIsoDate) {
-    return {
-      hours: 0,
-      minutes: 0,
-      seconds: 0,
-      totalSeconds: 0,
-      isExpired: false,
-      formatted: "--:--:--",
-    };
+    const today20h = new Date();
+    today20h.setHours(20, 0, 0, 0);
+    targetTime = today20h.getTime();
+  } else {
+    targetTime = new Date(targetIsoDate).getTime();
   }
 
-  const targetTime = new Date(targetIsoDate).getTime();
   const now = Date.now();
   const diff = targetTime - now;
 

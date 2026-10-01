@@ -38,6 +38,7 @@ export type GroupViewProps = {
 export default function GroupView({
   group,
   friends,
+  currentUser,
   mysteryItem,
   onCreateGroup,
   onJoinGroup,
@@ -297,50 +298,60 @@ export default function GroupView({
                       </span>
                     </div>
                     <div className="overflow-hidden rounded-[26px] border border-[#173f35]/8 bg-white">
-                      {group.members.map((member, index) => (
-                        <motion.div
-                          key={member.id}
-                          initial={{ opacity: 0, x: -18 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.08 }}
-                          className={`relative flex items-center gap-4 border-b border-[#173f35]/8 p-4 last:border-0 sm:p-5 ${
-                            group.members.length === 4 && index === group.members.length - 1 ? "bg-[#fff5f0]" : ""
-                          }`}
-                        >
-                          <span
-                            className={`grid h-9 w-9 shrink-0 place-items-center rounded-full font-display text-base font-semibold ${
-                              index === 0 ? "bg-[#f3c969] text-[#173f35]" : "bg-[#f3efe6] text-[#7b8780]"
+                      {group.members.map((member, index) => {
+                        const isCurrentUser = Boolean(
+                          (member.userId && currentUser?.id && member.userId === currentUser.id) ||
+                          (member.name && currentUser?.name && (
+                            member.name.toLowerCase() === currentUser.name.toLowerCase() ||
+                            member.name.toLowerCase() === currentUser.name.split(" ")[0].toLowerCase()
+                          ))
+                        );
+
+                        return (
+                          <motion.div
+                            key={member.id || member.userId || `mem-${index}`}
+                            initial={{ opacity: 0, x: -18 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.08 }}
+                            className={`relative flex items-center gap-4 border-b border-[#173f35]/8 p-4 last:border-0 sm:p-5 ${
+                              isCurrentUser ? "bg-[#fff8f5]" : (group.members.length === 4 && index === group.members.length - 1 ? "bg-[#fff5f0]" : "")
                             }`}
                           >
-                            {index === 0 ? <Crown size={17} fill="currentColor" /> : index + 1}
-                          </span>
-                          <img src={member.avatar} alt="" className="h-12 w-12 rounded-full object-cover" />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="truncate font-extrabold text-[#173f35]">
-                                {member.name}
-                                {member.id === 1 ? " (toi)" : ""}
+                            <span
+                              className={`grid h-9 w-9 shrink-0 place-items-center rounded-full font-display text-base font-semibold ${
+                                index === 0 ? "bg-[#f3c969] text-[#173f35]" : "bg-[#f3efe6] text-[#7b8780]"
+                              }`}
+                            >
+                              {index === 0 ? <Crown size={17} fill="currentColor" /> : index + 1}
+                            </span>
+                            <img src={member.avatar} alt="" className="h-12 w-12 rounded-full object-cover" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="truncate font-extrabold text-[#173f35]">
+                                  {member.name}
+                                  {isCurrentUser ? " (toi)" : ""}
+                                </p>
+                                {member.isNpc && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-[#e9e5dc] px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-[#748079]">
+                                    <Bot size={10} /> IA
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`mt-1 text-xs font-bold ${member.change >= 0 ? "text-[#478463]" : "text-[#c66748]"}`}>
+                                {member.change >= 0 ? "+" : ""}
+                                {member.change} pts cette semaine
                               </p>
-                              {member.isNpc && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-[#e9e5dc] px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-[#748079]">
-                                  <Bot size={10} /> IA
-                                </span>
-                              )}
                             </div>
-                            <p className={`mt-1 text-xs font-bold ${member.change >= 0 ? "text-[#478463]" : "text-[#c66748]"}`}>
-                              {member.change >= 0 ? "+" : ""}
-                              {member.change} pts cette semaine
+                            <p className="font-display text-2xl font-semibold text-[#173f35]">
+                              {member.points}
+                              <span className="ml-1 font-sans text-[10px] font-bold uppercase text-[#8a958f]">pts</span>
                             </p>
-                          </div>
-                          <p className="font-display text-2xl font-semibold text-[#173f35]">
-                            {member.points}
-                            <span className="ml-1 font-sans text-[10px] font-bold uppercase text-[#8a958f]">pts</span>
-                          </p>
-                          {group.members.length === 4 && index === group.members.length - 1 && (
-                            <span className="absolute bottom-0 left-0 top-0 w-1 bg-[#e9683a]" />
-                          )}
-                        </motion.div>
-                      ))}
+                            {isCurrentUser && (
+                              <span className="absolute bottom-0 left-0 top-0 w-1 bg-[#e9683a]" />
+                            )}
+                          </motion.div>
+                        );
+                      })}
 
                       {/* Empty slots for private squad */}
                       {Array.from({ length: Math.max(0, 4 - group.members.length) }).map((_, emptyIdx) => {

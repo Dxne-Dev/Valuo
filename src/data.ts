@@ -24,6 +24,7 @@ export type FeedPost = {
 };
 
 export type UserProfile = {
+  id?: string;
   name: string;
   city: string;
   bio: string;
@@ -49,6 +50,7 @@ export type AppNotification = {
 
 export type GroupMember = {
   id: number;
+  userId?: string;
   name: string;
   avatar: string;
   points: number;

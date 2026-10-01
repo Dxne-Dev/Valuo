@@ -52,18 +52,47 @@ export async function registerWithTemporaryPassword(email: string, name?: string
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const activationUrl = `${origin}?mode=login&email=${encodeURIComponent(cleanEmail)}`;
 
-  // Send custom VALUO welcome email
-  await sendValuoWelcomeEmail({
-    email: cleanEmail,
-    name: userName,
-    tempPassword,
-    activationUrl,
-  });
-
   if (!isSupabaseConfigured) {
+    await sendValuoWelcomeEmail({
+      email: cleanEmail,
+      name: userName,
+      tempPassword,
+      activationUrl,
+    });
     return { data: null, error: null, tempPassword, isMock: true };
   }
 
+  // 1. Check if email already exists in Supabase
+  try {
+    const { data: existsRpc } = await supabase.rpc("check_email_exists", { p_email: cleanEmail });
+    if (existsRpc === true) {
+      return {
+        data: null,
+        error: { message: "Cette adresse email est déjà associée à un compte. Veuillez vous connecter." },
+        tempPassword: "",
+        isMock: false,
+      };
+    }
+
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", cleanEmail)
+      .maybeSingle();
+
+    if (existingProfile) {
+      return {
+        data: null,
+        error: { message: "Cette adresse email est déjà associée à un compte. Veuillez vous connecter." },
+        tempPassword: "",
+        isMock: false,
+      };
+    }
+  } catch (err) {
+    console.warn("Could not check email uniqueness:", err);
+  }
+
+  // 2. Perform Supabase Auth Sign Up
   const { data, error } = await supabase.auth.signUp({
     email: cleanEmail,
     password: tempPassword,
@@ -77,7 +106,29 @@ export async function registerWithTemporaryPassword(email: string, name?: string
     },
   });
 
-  return { data, error, tempPassword, isMock: false };
+  if (error) {
+    return { data: null, error, tempPassword: "", isMock: false };
+  }
+
+  // If user already exists (identities empty), Supabase returned existing user
+  if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return {
+      data: null,
+      error: { message: "Cette adresse email est déjà associée à un compte. Veuillez vous connecter." },
+      tempPassword: "",
+      isMock: false,
+    };
+  }
+
+  // 3. Send custom VALUO welcome email only on successful registration
+  await sendValuoWelcomeEmail({
+    email: cleanEmail,
+    name: userName,
+    tempPassword,
+    activationUrl,
+  });
+
+  return { data, error: null, tempPassword, isMock: false };
 }
 
 export async function signInWithPassword(email: string, password: string) {
@@ -699,6 +750,9 @@ export type MysteryItemData = {
 };
 
 export async function fetchMysteryItem(): Promise<MysteryItemData> {
+  const defaultEndsAt = new Date();
+  defaultEndsAt.setHours(20, 0, 0, 0);
+
   const defaultMystery: MysteryItemData = {
     title: "Vase en faïence à décor floral",
     image: media.mystery,
@@ -707,6 +761,7 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
     realPrice: 68,
     dayNumber: 4,
     status: "active",
+    ends_at: defaultEndsAt.toISOString(),
   };
 
   if (isSupabaseConfigured) {
@@ -752,7 +807,7 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
       }
 
       if (chosen) {
-        const endsAtTime = chosen.ends_at ? new Date(chosen.ends_at).getTime() : 0;
+        const endsAtTime = chosen.ends_at ? new Date(chosen.ends_at).getTime() : defaultEndsAt.getTime();
         const isRevealed = Boolean(endsAtTime > 0 && Date.now() >= endsAtTime) || chosen.status === "revealed";
 
         const item: MysteryItemData = {
@@ -764,7 +819,7 @@ export async function fetchMysteryItem(): Promise<MysteryItemData> {
           realPrice: Number(chosen.real_price) || 0,
           dayNumber: chosen.day_number || 1,
           starts_at: chosen.starts_at || chosen.created_at,
-          ends_at: chosen.ends_at || undefined,
+          ends_at: chosen.ends_at || defaultEndsAt.toISOString(),
           status: isRevealed ? "revealed" : (chosen.status || "active"),
           created_at: chosen.created_at,
         };
@@ -1316,12 +1371,7 @@ export async function fetchUserSquad(userId: string): Promise<GroupData | null> 
         is_npc,
         points,
         rank_change,
-        current_estimate,
-        profiles (
-          id,
-          name,
-          avatar_url
-        )
+        current_estimate
       )
     `)
     .eq("id", memberEntry.squad_id)
@@ -1329,15 +1379,45 @@ export async function fetchUserSquad(userId: string): Promise<GroupData | null> 
 
   if (!squad) return null;
 
-  const members: GroupMember[] = (squad.squad_members || []).map((m: any, idx: number) => ({
-    id: idx + 1,
-    name: m.is_npc ? m.npc_name : (m.profiles?.name?.split(" ")[0] || "Membre"),
-    avatar: m.is_npc ? m.npc_avatar : (m.profiles?.avatar_url || avatars.lea),
-    points: m.points || 0,
-    change: m.rank_change || 0,
-    estimate: m.current_estimate ? Number(m.current_estimate) : null,
-    isNpc: m.is_npc,
-  }));
+  // Retrieve user profiles for all non-NPC members
+  const realUserIds = (squad.squad_members || [])
+    .filter((m: any) => !m.is_npc && m.user_id)
+    .map((m: any) => m.user_id);
+
+  let profileMap: Record<string, { name: string; avatar: string }> = {};
+  if (realUserIds.length > 0) {
+    try {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, name, avatar_url")
+        .in("id", realUserIds);
+
+      if (profs) {
+        profs.forEach((p: any) => {
+          profileMap[p.id] = {
+            name: p.name || "Joueur",
+            avatar: p.avatar_url || avatars.lea,
+          };
+        });
+      }
+    } catch (e) {
+      console.warn("Could not batch load profiles:", e);
+    }
+  }
+
+  const members: GroupMember[] = (squad.squad_members || []).map((m: any, idx: number) => {
+    const prof = m.user_id ? profileMap[m.user_id] : null;
+    return {
+      id: idx + 1,
+      userId: m.user_id,
+      name: m.is_npc ? (m.npc_name || `Rival ${idx + 1}`) : (prof?.name?.split(" ")[0] || "Membre"),
+      avatar: m.is_npc ? (m.npc_avatar || avatars.lea) : (prof?.avatar || avatars.lea),
+      points: m.points || 0,
+      change: m.rank_change || 0,
+      estimate: m.current_estimate ? Number(m.current_estimate) : null,
+      isNpc: m.is_npc,
+    };
+  });
 
   return {
     id: squad.id,
@@ -1563,10 +1643,26 @@ export async function createSquadInDb(
 export async function joinSquadByCode(userId: string, code: string): Promise<GroupData | null> {
   if (!isSupabaseConfigured) return null;
 
+  const cleanCode = code.trim().toUpperCase();
+
+  try {
+    // 1. Try secure RPC function
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc("join_squad_by_code", {
+      p_code: cleanCode,
+    });
+
+    if (!rpcErr && rpcRes && rpcRes.success) {
+      return await fetchUserSquad(userId);
+    }
+  } catch (rpcEx) {
+    console.warn("RPC join_squad_by_code exception, using direct fallback:", rpcEx);
+  }
+
+  // 2. Direct fallback
   const { data: squad } = await supabase
     .from("squads")
     .select("id")
-    .eq("code", code.trim().toUpperCase())
+    .ilike("code", cleanCode)
     .maybeSingle();
 
   if (!squad) return null;
@@ -1577,8 +1673,8 @@ export async function joinSquadByCode(userId: string, code: string): Promise<Gro
   await supabase.from("squad_members").upsert({
     squad_id: squad.id,
     user_id: userId,
-    points: 140,
-    rank_change: 10,
+    points: 0,
+    rank_change: 0,
     is_npc: false,
   });
 
