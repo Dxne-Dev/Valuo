@@ -1629,10 +1629,46 @@ export async function createSquadInDb(
 ): Promise<GroupData | null> {
   if (!isSupabaseConfigured) return null;
 
-  // Clean up any existing squad membership first to avoid 409 conflicts
-  await leaveSquadInDb(userId);
-
   const code = `VALUO-${Math.floor(100 + Math.random() * 900)}`;
+
+  // 1. Resolve friend IDs
+  let friendUuids: string[] = [];
+  if (invitedFriends && invitedFriends.length > 0) {
+    try {
+      const { data: friendProfiles } = await supabase
+        .from("profiles")
+        .select("id, name")
+        .in("name", invitedFriends);
+
+      if (friendProfiles && friendProfiles.length > 0) {
+        friendUuids = friendProfiles.map((p) => p.id);
+      }
+    } catch (e) {
+      console.warn("Could not resolve friend UUIDs for squad creation:", e);
+    }
+  }
+
+  // 2. Try Atomic Security-Definer RPC first
+  try {
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc("create_squad_with_members", {
+      p_name: sanitizeInput(squadName),
+      p_code: code,
+      p_invited_user_ids: friendUuids,
+      p_fill_with_npc: fillWithNpc,
+    });
+
+    if (!rpcErr && rpcRes?.success) {
+      return await fetchUserSquad(userId);
+    }
+    if (rpcErr) {
+      console.warn("RPC create_squad_with_members not available or failed, falling back to direct table inserts:", rpcErr.message);
+    }
+  } catch (err) {
+    console.warn("RPC call error:", err);
+  }
+
+  // 3. Fallback: direct table operations
+  await leaveSquadInDb(userId);
 
   const { data: squad, error } = await supabase
     .from("squads")
@@ -1670,31 +1706,18 @@ export async function createSquadInDb(
     },
   ];
 
-  // If friends are selected, add them
-  if (invitedFriends && invitedFriends.length > 0) {
-    try {
-      const { data: friendProfiles } = await supabase
-        .from("profiles")
-        .select("id, name")
-        .in("name", invitedFriends);
-
-      if (friendProfiles && friendProfiles.length > 0) {
-        for (const fp of friendProfiles) {
-          membersToInsert.push({
-            squad_id: squad.id,
-            user_id: fp.id,
-            points: 0,
-            rank_change: 0,
-            is_npc: false,
-          });
-        }
-      }
-    } catch (e) {
-      console.warn("Could not attach invited friends:", e);
+  if (friendUuids.length > 0) {
+    for (const fid of friendUuids) {
+      membersToInsert.push({
+        squad_id: squad.id,
+        user_id: fid,
+        points: 0,
+        rank_change: 0,
+        is_npc: false,
+      });
     }
   }
 
-  // Only fill with NPC rivals if explicitly requested (e.g. matchmaking mode)
   if (fillWithNpc) {
     const npcs = [
       { name: "Léon (IA)", avatar: avatars.samir, est: 55 },

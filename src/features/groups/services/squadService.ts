@@ -1,6 +1,5 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { type GroupData, type GroupMember, avatars } from "@/data";
-import { sanitizeInput } from "@/lib/security";
 import { getCurrentWeekNumber } from "@/lib/dateUtils";
 import {
   createFeedPost,
@@ -176,106 +175,7 @@ export async function leaveSquadInDb(
   }
 }
 
-export async function createSquadInDb(
-  userId: string,
-  squadName: string,
-  invitedFriends: string[] = [],
-  fillWithNpc = false,
-): Promise<GroupData | null> {
-  if (!isSupabaseConfigured) return null;
-
-  // Clean up any existing squad membership first to avoid conflicts
-  await leaveSquadInDb(userId);
-
-  const code = `VALUO-${Math.floor(100 + Math.random() * 900)}`;
-
-  const { data: squad, error } = await supabase
-    .from("squads")
-    .insert({
-      name: sanitizeInput(squadName),
-      code,
-      created_by: userId,
-      week_number: getCurrentWeekNumber(),
-      status: "active",
-    })
-    .select()
-    .single();
-
-  if (error || !squad) {
-    console.error("Error creating squad:", error);
-    return null;
-  }
-
-  const membersToInsert: Array<{
-    squad_id: string;
-    user_id?: string | null;
-    npc_name?: string;
-    npc_avatar?: string;
-    points: number;
-    rank_change: number;
-    is_npc: boolean;
-    current_estimate?: number;
-  }> = [
-    {
-      squad_id: squad.id,
-      user_id: userId,
-      points: 0,
-      rank_change: 0,
-      is_npc: false,
-    },
-  ];
-
-  if (invitedFriends && invitedFriends.length > 0) {
-    try {
-      const { data: friendProfiles } = await supabase
-        .from("profiles")
-        .select("id, name")
-        .in("name", invitedFriends);
-
-      if (friendProfiles && friendProfiles.length > 0) {
-        for (const fp of friendProfiles) {
-          membersToInsert.push({
-            squad_id: squad.id,
-            user_id: fp.id,
-            points: 0,
-            rank_change: 0,
-            is_npc: false,
-          });
-        }
-      }
-    } catch (e) {
-      console.warn("Could not attach invited friends:", e);
-    }
-  }
-
-  if (fillWithNpc) {
-    const npcs = [
-      { name: "Léon (IA)", avatar: avatars.samir, est: 55 },
-      { name: "Camille (IA)", avatar: avatars.camille, est: 63 },
-      { name: "Jeanne (IA)", avatar: avatars.ines, est: 71 },
-    ];
-
-    const slotsNeeded = Math.max(0, 4 - membersToInsert.length);
-    for (let i = 0; i < slotsNeeded; i++) {
-      membersToInsert.push({
-        squad_id: squad.id,
-        npc_name: npcs[i]?.name || `Rival ${i + 1} (IA)`,
-        npc_avatar: npcs[i]?.avatar || avatars.samir,
-        is_npc: true,
-        points: 0,
-        rank_change: 0,
-        current_estimate: npcs[i]?.est || 55 + i * 8,
-      });
-    }
-  }
-
-  const { error: membersError } = await supabase.from("squad_members").insert(membersToInsert);
-  if (membersError) {
-    console.error("Error inserting squad members:", membersError);
-  }
-
-  return await fetchUserSquad(userId);
-}
+export { createSquadInDb } from "@/lib/api";
 
 export async function joinSquadByCode(userId: string, code: string): Promise<GroupData | null> {
   if (!isSupabaseConfigured) return null;
