@@ -31,35 +31,24 @@ export async function getCurrentSession() {
   return data.session;
 }
 
-import { sendValuoWelcomeEmail } from "./emailService";
-
-export async function registerWithTemporaryPassword(email: string, name?: string) {
+export async function registerWithMagicLink(email: string, name?: string) {
   const cleanEmail = email.trim().toLowerCase();
   
   // Rate limiting check
-  const rateLimit = checkRateLimit(`register_${cleanEmail}`, 3, 60000);
+  const rateLimit = checkRateLimit(`register_${cleanEmail}`, 5, 60000);
   if (!rateLimit.allowed) {
     return {
       data: null,
       error: { message: `Trop de tentatives. Réessayez dans ${rateLimit.retryAfterSeconds}s.` },
-      tempPassword: "",
       isMock: false,
     };
   }
 
-  const tempPassword = generateSecureTemporaryPassword();
   const userName = sanitizeInput(name?.trim() || splitEmail(cleanEmail));
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const activationUrl = `${origin}?mode=login&email=${encodeURIComponent(cleanEmail)}`;
 
   if (!isSupabaseConfigured) {
-    await sendValuoWelcomeEmail({
-      email: cleanEmail,
-      name: userName,
-      tempPassword,
-      activationUrl,
-    });
-    return { data: null, error: null, tempPassword, isMock: true };
+    return { data: null, error: null, isMock: true };
   }
 
   // 1. Check if email already exists in Supabase
@@ -69,7 +58,6 @@ export async function registerWithTemporaryPassword(email: string, name?: string
       return {
         data: null,
         error: { message: "Cette adresse email est déjà associée à un compte. Veuillez vous connecter." },
-        tempPassword: "",
         isMock: false,
       };
     }
@@ -84,7 +72,6 @@ export async function registerWithTemporaryPassword(email: string, name?: string
       return {
         data: null,
         error: { message: "Cette adresse email est déjà associée à un compte. Veuillez vous connecter." },
-        tempPassword: "",
         isMock: false,
       };
     }
@@ -92,46 +79,42 @@ export async function registerWithTemporaryPassword(email: string, name?: string
     console.warn("Could not check email uniqueness:", err);
   }
 
-  // 2. Perform Supabase Auth Sign Up
-  const { data, error } = await supabase.auth.signUp({
+  // 2. Trigger native Supabase 1-click Magic Link / Signup Email
+  const { data, error } = await supabase.auth.signInWithOtp({
     email: cleanEmail,
-    password: tempPassword,
     options: {
       data: {
         name: userName,
-        needs_password_change: true,
-        temp_password_created_at: Date.now(),
+        needs_password_change: false,
       },
-      emailRedirectTo: activationUrl,
+      emailRedirectTo: origin,
     },
   });
 
   if (error) {
-    return { data: null, error, tempPassword: "", isMock: false };
+    return { data: null, error, isMock: false };
   }
 
-  // If user already exists (identities empty), Supabase returned existing user
-  if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-    return {
-      data: null,
-      error: { message: "Cette adresse email est déjà associée à un compte. Veuillez vous connecter." },
-      tempPassword: "",
-      isMock: false,
-    };
-  }
+  return { data, error: null, isMock: false };
+}
 
-  // 3. Prevent auto-login: immediately clear any sign-up session so the user MUST retrieve & enter the temp password
-  await supabase.auth.signOut();
+// Backward compatibility alias
+export const registerWithTemporaryPassword = registerWithMagicLink;
 
-  // 4. Send custom VALUO welcome email only on successful registration
-  await sendValuoWelcomeEmail({
+export async function signInWithMagicLink(email: string) {
+  const cleanEmail = email.trim().toLowerCase();
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+  if (!isSupabaseConfigured) return { data: null, error: null, isMock: true };
+
+  const { data, error } = await supabase.auth.signInWithOtp({
     email: cleanEmail,
-    name: userName,
-    tempPassword,
-    activationUrl,
+    options: {
+      emailRedirectTo: origin,
+    },
   });
 
-  return { data: null, error: null, tempPassword, isMock: false };
+  return { data, error, isMock: false };
 }
 
 export async function signInWithPassword(email: string, password: string) {
