@@ -29,3 +29,6 @@ DESIGN.md
 conv*
 ARCHITECTURE*
 plan-de*
+supabase_logs.json
+*.jsonl
+

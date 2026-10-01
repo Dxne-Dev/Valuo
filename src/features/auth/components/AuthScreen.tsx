@@ -206,22 +206,22 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                 </h2>
 
                 <p className="mx-auto mt-3 max-w-md text-xs sm:text-sm leading-relaxed text-[#4f6057]">
-                  Un email d'activation a été envoyé à <strong className="text-[#173f35]">{email}</strong>.
+                  Un email de confirmation a été envoyé à <strong className="text-[#173f35]">{email}</strong> pour vérifier ton compte.
                 </p>
 
                 <div className="mx-auto mt-5 max-w-md rounded-2xl bg-white p-4 text-left border border-[#173f35]/10 shadow-sm">
                   <p className="text-xs font-bold text-[#173f35] flex items-center gap-1.5">
-                    <Sparkles size={14} className="text-[#e9683a]" /> Comment activer ton compte :
+                    <Sparkles size={14} className="text-[#e9683a]" /> Contenu de ton email :
                   </p>
                   <ul className="mt-2 space-y-1.5 text-xs text-[#6e7c74]">
                     <li className="flex items-center gap-2">
-                      <Check size={14} className="text-[#488262]" /> Ouvre l'email reçu dans ta boîte mail
+                      <Check size={14} className="text-[#488262]" /> Message de bienvenue officiel VALUO
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check size={14} className="text-[#488262]" /> Clique sur le bouton « Activer mon compte »
+                      <Check size={14} className="text-[#488262]" /> Ton mot de passe temporaire sécurisé (expire dans 24h)
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check size={14} className="text-[#488262]" /> Connexion automatique & accès immédiat à l'arène
+                      <Check size={14} className="text-[#488262]" /> Bouton d'activation directe
                     </li>
                   </ul>
                 </div>
@@ -234,7 +234,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                   }}
                   className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#173f35] py-4 text-sm font-extrabold text-white transition hover:bg-[#245b4c] shadow-lg shadow-[#173f35]/20"
                 >
-                  Revenir à la connexion <ArrowRight size={18} />
+                  Accéder à la connexion <ArrowRight size={18} />
                 </button>
               </div>
             ) : (
@@ -277,8 +277,8 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-[#6e7c74]">
                   {tab === "register"
-                    ? "Inscris-toi : reçois ton lien d'activation sécurisé en 1 clic par email."
-                    : "Saisis ton email et ton mot de passe pour accéder à ton espace."}
+                    ? "Inscris-toi : un mot de passe temporaire sécurisé te sera envoyé par email."
+                    : "Saisis ton email et ton mot de passe temporaire pour accéder à ton espace."}
                 </p>
 
                 {errorMsg && (
