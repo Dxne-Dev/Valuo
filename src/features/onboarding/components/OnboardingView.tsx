@@ -1,17 +1,23 @@
 import { motion } from "framer-motion";
 import {
   ArrowRight,
+  Bell,
+  BellRing,
   Camera,
   Check,
+  CheckCircle2,
   ChevronLeft,
+  Download,
   Eye,
   EyeOff,
   Flame,
   KeyRound,
   MapPin,
   PackageOpen,
+  Share2,
   ShieldAlert,
   ShieldCheck,
+  Smartphone,
   Sparkles,
   Trophy,
   Upload,
@@ -27,10 +33,12 @@ import Logo from "@/components/Logo";
 export type OnboardingViewProps = {
   initialIdentifier?: string;
   onComplete: (profile: Partial<UserProfile>, selectedSquadMode: "auto" | "code" | "skip", squadCode?: string) => void;
+  onInstall?: () => void;
+  canInstall?: boolean;
 };
 
-export default function OnboardingView({ initialIdentifier, onComplete }: OnboardingViewProps) {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+export default function OnboardingView({ initialIdentifier, onComplete, onInstall, canInstall = false }: OnboardingViewProps) {
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   const initialName = initialIdentifier && initialIdentifier.includes("@")
     ? initialIdentifier.split("@")[0].charAt(0).toUpperCase() + initialIdentifier.split("@")[0].slice(1)
@@ -49,6 +57,14 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
   const [squadChoice, setSquadChoice] = useState<"auto" | "code" | "skip">("auto");
   const [squadCodeInput, setSquadCodeInput] = useState("");
 
+  const [notifGranted, setNotifGranted] = useState<boolean>(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      return Notification.permission === "granted";
+    }
+    return false;
+  });
+  const [installClicked, setInstallClicked] = useState(false);
+
   function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (file) {
@@ -63,7 +79,7 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
     }
   }
 
-  async function handleFinish() {
+  function handleValidatePasswordStep() {
     setPwdError("");
     if (password.trim()) {
       const validation = validatePassword(password.trim());
@@ -76,7 +92,30 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
         return;
       }
     }
+    setStep(5);
+  }
 
+  async function handleRequestNotification() {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === "granted") {
+          setNotifGranted(true);
+        }
+      } catch (err) {
+        console.warn("Could not request notification permission:", err);
+      }
+    }
+  }
+
+  function handleTriggerInstall() {
+    setInstallClicked(true);
+    if (onInstall) {
+      onInstall();
+    }
+  }
+
+  async function handleFinish() {
     const chosenName = sanitizeInput(name.trim() || initialName || "Joueur VALUO");
     const chosenCity = sanitizeInput(city.trim() || "France");
     const chosenAvatar = selectedAvatar;
@@ -107,10 +146,10 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
           <Logo />
           <div className="flex items-center gap-2">
             <span className="text-xs font-extrabold uppercase tracking-widest text-[#7a8780]">
-              Étape {step}/4
+              Étape {step}/5
             </span>
             <div className="flex gap-1.5">
-              {[1, 2, 3, 4].map((s) => (
+              {[1, 2, 3, 4, 5].map((s) => (
                 <span
                   key={s}
                   className={`h-2 rounded-full transition-all duration-300 ${
@@ -462,13 +501,13 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
                 onClick={() => setStep(4)}
                 className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#e9683a] py-3.5 text-sm font-extrabold text-white transition hover:bg-[#d9582d] shadow-lg shadow-[#e9683a]/25"
               >
-                Dernière étape <ArrowRight size={18} />
+                Étape suivante <ArrowRight size={18} />
               </button>
             </div>
           </motion.div>
         )}
 
-        {/* STEP 4: PERSONALIZE PASSWORD & ENTER */}
+        {/* STEP 4: PERSONALIZE PASSWORD */}
         {step === 4 && (
           <motion.div
             key="step-4"
@@ -480,13 +519,13 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
           >
             <div className="text-center sm:text-left">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e9683a]/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-[#e9683a]">
-                <ShieldAlert size={13} /> Sécurité du compte · Dernière étape
+                <ShieldAlert size={13} /> Sécurité du compte · Étape 4/5
               </span>
               <h2 className="mt-2 font-display text-3xl font-semibold text-[#173f35] sm:text-4xl">
                 Définis ton mot de passe
               </h2>
               <p className="mt-1 text-sm text-[#6f7e76]">
-                Remplace le mot de passe temporaire par ton mot de passe personnel pour finaliser ton compte et accéder au Feed.
+                Remplace le mot de passe temporaire par ton mot de passe personnel pour sécuriser ton compte.
               </p>
             </div>
 
@@ -495,7 +534,7 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
                 <ShieldCheck size={16} className="text-[#488262]" /> Pourquoi cette étape ?
               </p>
               <p className="mt-1">
-                Le mot de passe temporaire reçu par email expire dans <strong className="text-[#e9683a]">24 heures</strong>. Choisis ton mot de passe dès maintenant pour sécuriser ton compte.
+                Le mot de passe temporaire reçu par email expire dans <strong className="text-[#e9683a]">24 heures</strong>. Choisis ton mot de passe dès maintenant pour sécuriser ton accès.
               </p>
             </div>
 
@@ -565,10 +604,146 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
               </button>
               <button
                 type="button"
-                onClick={handleFinish}
-                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#173f35] py-3.5 text-sm font-extrabold text-white transition hover:bg-[#245b4c] shadow-lg shadow-[#173f35]/25"
+                onClick={handleValidatePasswordStep}
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#e9683a] py-3.5 text-sm font-extrabold text-white transition hover:bg-[#d9582d] shadow-lg shadow-[#e9683a]/25"
               >
-                Accéder au feed <Sparkles size={18} className="text-[#f3c969]" />
+                Dernière étape <ArrowRight size={18} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* STEP 5: NOTIFICATIONS & INSTALL APP */}
+        {step === 5 && (
+          <motion.div
+            key="step-5"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+            className="mt-6"
+          >
+            <div className="text-center sm:text-left">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f3c969]/30 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-[#7a580a]">
+                <Sparkles size={13} className="text-[#e9683a]" /> Expérience Optimale · Étape 5/5
+              </span>
+              <h2 className="mt-2 font-display text-3xl font-semibold text-[#173f35] sm:text-4xl">
+                Prépare ton jeu
+              </h2>
+              <p className="mt-1 text-sm text-[#6f7e76]">
+                Pour ne rater aucun défi, active les alertes et installe l'application sur ton écran d'accueil.
+              </p>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              {/* Card 1: Notifications */}
+              <div className="rounded-2xl border-2 border-[#173f35]/10 bg-white p-5 transition hover:border-[#173f35]/20 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3.5">
+                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#e9683a]/10 text-[#e9683a]">
+                      <BellRing size={22} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-[#173f35] flex items-center gap-1.5">
+                        Activer les notifications
+                        {notifGranted && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-extrabold text-emerald-700 border border-emerald-200">
+                            <Check size={11} strokeWidth={3} /> Activé
+                          </span>
+                        )}
+                      </h3>
+                      <p className="mt-1 text-xs leading-relaxed text-[#68766e]">
+                        Rappels à 08h00 pour le défi photo, 20h00 pour la Mystery Box et notifications en direct des actions de ton escouade.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-end">
+                  {notifGranted ? (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200">
+                      <CheckCircle2 size={16} /> Alertes activées avec succès !
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleRequestNotification}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[#173f35] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#245b4c] shadow-sm active:scale-95"
+                    >
+                      <Bell size={14} /> Activer les alertes
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Card 2: Install App */}
+              <div className="rounded-2xl border-2 border-[#e9683a]/30 bg-[#fffbf9] p-5 transition shadow-sm">
+                <div className="flex items-start gap-3.5">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#e9683a] text-white">
+                    <Smartphone size={22} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-extrabold text-[#173f35]">
+                        Installer l'application
+                      </h3>
+                      <span className="rounded-full bg-[#e9683a]/15 px-2 py-0.5 text-[10px] font-extrabold text-[#e9683a]">
+                        Expérience recommandée
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-[#68766e]">
+                      Profite d'une meilleure fluidité, d'un affichage plein écran et d'un accès instantané sans passer par ton navigateur.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <button
+                    type="button"
+                    onClick={handleTriggerInstall}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#e9683a] py-3 text-xs font-extrabold text-white transition hover:bg-[#d9582d] shadow-md shadow-[#e9683a]/20 active:scale-[0.99]"
+                  >
+                    <Download size={16} />
+                    <span>
+                      {canInstall
+                        ? "👉 Clique ICI pour installer l'application"
+                        : "👉 Clique ICI pour ajouter l'application"}
+                    </span>
+                  </button>
+
+                  {/* Safari / iOS guide */}
+                  <div className="flex items-center gap-2 rounded-xl bg-white p-2.5 text-[11px] font-medium text-[#68766e] border border-[#173f35]/10">
+                    <Share2 size={14} className="shrink-0 text-[#e9683a]" />
+                    <span>
+                      <strong>Sur iPhone (Safari) :</strong> Clique sur <strong>Partager</strong> puis <strong>« Sur l'écran d'accueil »</strong>.
+                    </span>
+                  </div>
+
+                  {installClicked && (
+                    <p className="text-center text-[11px] font-bold text-[#173f35]/70">
+                      {canInstall
+                        ? "L'invitation d'installation a été ouverte sur ton appareil."
+                        : "Suis les instructions de ton navigateur ou du menu Partager pour ajouter VALUO."}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setStep(4)}
+                className="flex items-center justify-center gap-1.5 rounded-2xl border-2 border-[#173f35]/15 px-5 py-3.5 text-sm font-bold text-[#173f35] transition hover:bg-white"
+              >
+                <ChevronLeft size={18} /> Retour
+              </button>
+              <button
+                type="button"
+                onClick={handleFinish}
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#173f35] py-3.5 text-sm font-extrabold text-white transition hover:bg-[#245b4c] shadow-lg shadow-[#173f35]/25 active:scale-[0.99]"
+              >
+                Entrer sur VALUO <Sparkles size={18} className="text-[#f3c969]" />
               </button>
             </div>
           </motion.div>
@@ -577,3 +752,4 @@ export default function OnboardingView({ initialIdentifier, onComplete }: Onboar
     </main>
   );
 }
+

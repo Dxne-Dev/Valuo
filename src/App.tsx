@@ -1046,6 +1046,8 @@ export default function App() {
       <OnboardingView
         initialIdentifier={authIdentifier}
         onComplete={handleOnboardingComplete}
+        onInstall={installApp}
+        canInstall={Boolean(installPrompt)}
       />
     );
   }
