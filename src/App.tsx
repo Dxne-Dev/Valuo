@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2, Loader2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Crown, Loader2, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AdminView } from "@/features/admin";
@@ -26,6 +26,7 @@ import {
   type UserProfile,
 } from "./data";
 import {
+  acceptSquadLeadership,
   addPostComment,
   type ChallengeData,
   createFeedPost,
@@ -48,6 +49,7 @@ import {
   joinSquadByCode,
   leaveSquadInDb,
   markNotificationsAsReadInDb,
+  refuseSquadLeadership,
   removeActiveRecruitmentLocalCache,
   republishSquadRecruitment,
   saveActiveRecruitmentLocalCache,
@@ -322,6 +324,18 @@ export default function App() {
           }
         },
       )
+      // Squads & Leadership
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "squads" },
+        async () => {
+          const currentUid = userIdRef.current;
+          if (currentUid) {
+            const updated = await fetchUserSquad(currentUid);
+            setGroup(updated);
+          }
+        },
+      )
       // Squad members
       .on(
         "postgres_changes",
@@ -330,7 +344,7 @@ export default function App() {
           const currentUid = userIdRef.current;
           if (currentUid) {
             const updated = await fetchUserSquad(currentUid);
-            if (updated) setGroup(updated);
+            setGroup(updated);
           }
         },
       )
@@ -522,6 +536,42 @@ export default function App() {
     description: "",
     action: async () => {},
   });
+
+  const [leadershipModalOpen, setLeadershipModalOpen] = useState(false);
+
+  // Detect when current user is the pending leader
+  useEffect(() => {
+    if (group && userId && group.pendingLeaderId === userId) {
+      setLeadershipModalOpen(true);
+    } else {
+      setLeadershipModalOpen(false);
+    }
+  }, [group?.pendingLeaderId, userId]);
+
+  async function handleAcceptLeadership() {
+    if (!group?.id) return;
+    setLeadershipModalOpen(false);
+    const ok = await acceptSquadLeadership(group.id);
+    if (ok) {
+      setNotice("👑 Félicitations ! Tu es désormais le Chef d'escouade.");
+      if (userId) {
+        const updated = await fetchUserSquad(userId);
+        if (updated) setGroup(updated);
+      }
+    } else {
+      setNotice("Erreur lors de la prise de leadership.");
+    }
+  }
+
+  async function handleRefuseLeadership() {
+    if (!group?.id) return;
+    setLeadershipModalOpen(false);
+    const ok = await refuseSquadLeadership(group.id);
+    if (ok) {
+      setGroup(null);
+      setNotice("Tu as refusé le leadership et quitté l'escouade.");
+    }
+  }
 
   async function executeCreateGroup(name: string, invitedFriends: string[]) {
     if (userId) {
@@ -1169,6 +1219,68 @@ export default function App() {
                   className="flex-1 rounded-full bg-[#e9683a] py-3 text-xs font-extrabold text-white shadow-lg shadow-[#e9683a]/25 transition hover:bg-[#d9582d]"
                 >
                   Confirmer
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Succession de Leadership */}
+      <AnimatePresence>
+        {leadershipModalOpen && group && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              className="relative max-h-[90vh] w-full max-w-md overflow-hidden rounded-[28px] bg-white p-6 sm:p-8 shadow-2xl border border-[#f3c969]/30 text-center"
+            >
+              <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-[#f3c969] to-[#e9683a] text-white shadow-lg shadow-[#e9683a]/25 mb-4">
+                <Crown size={32} />
+              </div>
+
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f3c969]/20 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-[#d9582d]">
+                Succession d'escouade
+              </span>
+
+              <h3 className="mt-3 font-display text-2xl font-bold text-[#173f35]">
+                Deviens le nouveau Chef d'escouade !
+              </h3>
+
+              <p className="mt-3 text-xs sm:text-sm text-[#55665e] leading-relaxed">
+                Le créateur de l'escouade « <strong>{group.name}</strong> » a quitté le groupe. En tant que joueur principal restant, souhaites-tu reprendre le flambeau et diriger l'escouade ?
+              </p>
+
+              <div className="mt-4 rounded-2xl bg-[#fff6f2] border border-[#e9683a]/20 p-3.5 text-left text-xs text-[#e9683a]">
+                <p className="font-bold flex items-center gap-1.5">
+                  <Sparkles size={14} /> Privilège Chef d'escouade :
+                </p>
+                <p className="mt-1 text-[#76837c]">
+                  Tu pourras publier des annonces de recrutement dans le Feed public pour compléter ton équipe.
+                </p>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleAcceptLeadership}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#173f35] py-3.5 text-sm font-extrabold text-white shadow-lg shadow-[#173f35]/20 transition hover:bg-[#245b4c] hover:scale-[1.02]"
+                >
+                  <Crown size={16} className="text-[#f3c969]" /> Devenir Chef d'escouade
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRefuseLeadership}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-white py-3 text-xs font-bold text-red-600 transition hover:bg-red-50"
+                >
+                  Refuser et quitter l'escouade
                 </button>
               </div>
             </motion.div>

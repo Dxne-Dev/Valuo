@@ -65,6 +65,9 @@ export type GroupData = {
   code: string;
   week: number;
   members: GroupMember[];
+  createdBy?: string;
+  pendingLeaderId?: string;
+  isLeader?: boolean;
 };
 
 export const todayChallenge = {

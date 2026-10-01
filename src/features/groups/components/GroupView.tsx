@@ -99,9 +99,26 @@ export default function GroupView({
       {/* Header avec Actions */}
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-[#e9683a]">
-            {group ? `Escouade active · Semaine ${group.week}` : "Escouade de jeu"}
-          </p>
+          <div className="mb-1 flex items-center gap-2">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#e9683a]">
+              {group ? `Escouade active · Semaine ${group.week}` : "Escouade de jeu"}
+            </p>
+            {group && (
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                (group.isLeader || (group.createdBy && currentUser?.id && group.createdBy === currentUser.id) || (group.members[0]?.userId === currentUser?.id))
+                  ? "bg-[#f3c969]/30 text-[#173f35]"
+                  : "bg-[#173f35]/5 text-[#76837c]"
+              }`}>
+                {(group.isLeader || (group.createdBy && currentUser?.id && group.createdBy === currentUser.id) || (group.members[0]?.userId === currentUser?.id)) ? (
+                  <>
+                    <Crown size={11} className="text-[#e9683a]" /> Chef d'escouade
+                  </>
+                ) : (
+                  "Membre"
+                )}
+              </span>
+            )}
+          </div>
           <h1 className="font-display text-3xl font-semibold tracking-[-0.03em] text-[#173f35] sm:text-4xl">
             {group ? group.name : "Rejoins ou crée une escouade"}
           </h1>
@@ -116,11 +133,14 @@ export default function GroupView({
         <div className="flex flex-wrap items-center gap-2">
           {group ? (
             <>
-              {group.members.length < 4 && onRepublishRecruitment && (
+              {/* Only the Squad Leader can recruit from the Feed */}
+              {group.members.length < 4 && 
+               (group.isLeader || (group.createdBy && currentUser?.id && group.createdBy === currentUser.id) || (group.members[0]?.userId === currentUser?.id)) && 
+               onRepublishRecruitment && (
                 <button
                   type="button"
                   onClick={onRepublishRecruitment}
-                  className="inline-flex items-center gap-2 rounded-full border border-[#e9683a]/30 bg-[#fff6f2] px-4 py-2.5 text-xs font-extrabold text-[#e9683a] transition hover:bg-[#e9683a] hover:text-white"
+                  className="inline-flex items-center gap-2 rounded-full border border-[#e9683a]/30 bg-[#fff6f2] px-4 py-2.5 text-xs font-extrabold text-[#e9683a] shadow-sm transition hover:bg-[#e9683a] hover:text-white hover:scale-[1.02]"
                 >
                   <Radio size={15} /> Recruter sur le Feed
                 </button>

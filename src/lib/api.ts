@@ -1370,6 +1370,8 @@ export async function fetchUserSquad(userId: string): Promise<GroupData | null> 
       name,
       code,
       week_number,
+      created_by,
+      pending_leader_id,
       squad_members (
         id,
         user_id,
@@ -1379,6 +1381,7 @@ export async function fetchUserSquad(userId: string): Promise<GroupData | null> 
         points,
         rank_change,
         current_estimate,
+        joined_at,
         profiles (
           id,
           name,
@@ -1431,6 +1434,9 @@ export async function fetchUserSquad(userId: string): Promise<GroupData | null> 
     code: squad.code,
     week: squad.week_number || 38,
     members,
+    createdBy: squad.created_by,
+    pendingLeaderId: squad.pending_leader_id,
+    isLeader: Boolean(squad.created_by && squad.created_by === userId),
   };
 }
 
@@ -1475,10 +1481,25 @@ export async function leaveSquadInDb(
   userId: string,
   squadId?: string,
   squadCode?: string,
-): Promise<{ remainingCount: number }> {
+): Promise<{ remainingCount: number; pendingLeaderId?: string }> {
   if (!isSupabaseConfigured) return { remainingCount: 0 };
 
   try {
+    // 1. Invoke atomic succession RPC
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc("leave_squad_with_succession", {
+      p_user_id: userId,
+      p_squad_id: squadId || null,
+      p_squad_code: squadCode || null,
+    });
+
+    if (!rpcErr && rpcRes) {
+      return {
+        remainingCount: rpcRes.remaining_count ?? 0,
+        pendingLeaderId: rpcRes.pending_leader_id,
+      };
+    }
+
+    // Direct fallback
     let targetSquadId = squadId;
     let targetSquadCode = squadCode;
 
@@ -1495,13 +1516,8 @@ export async function leaveSquadInDb(
       }
     }
 
-    // 1. Remove user from squad_members
-    await supabase
-      .from("squad_members")
-      .delete()
-      .eq("user_id", userId);
+    await supabase.from("squad_members").delete().eq("user_id", userId);
 
-    // 2. Check remaining real members in that squad
     if (targetSquadId) {
       const { data: remainingMembers } = await supabase
         .from("squad_members")
@@ -1512,24 +1528,14 @@ export async function leaveSquadInDb(
       const remainingCount = remainingMembers?.length || 0;
 
       if (remainingCount === 0) {
-        // Delete orphaned squad
-        await supabase
-          .from("squads")
-          .delete()
-          .eq("id", targetSquadId);
-
-        // Delete associated recruitment post from feed
+        await supabase.from("squads").delete().eq("id", targetSquadId);
         if (targetSquadCode) {
           await deleteRecruitmentPostBySquadCode(targetSquadCode);
         }
       } else {
-        // If creator left, promote first remaining member to created_by
         const nextLeaderId = remainingMembers?.[0]?.user_id;
         if (nextLeaderId) {
-          await supabase
-            .from("squads")
-            .update({ created_by: nextLeaderId })
-            .eq("id", targetSquadId);
+          await supabase.from("squads").update({ created_by: nextLeaderId }).eq("id", targetSquadId);
         }
       }
 
@@ -1540,6 +1546,32 @@ export async function leaveSquadInDb(
   } catch (err) {
     console.warn("leaveSquadInDb error:", err);
     return { remainingCount: 0 };
+  }
+}
+
+export async function acceptSquadLeadership(squadId: string): Promise<boolean> {
+  if (!isSupabaseConfigured || !squadId) return false;
+  try {
+    const { data, error } = await supabase.rpc("accept_squad_leadership", {
+      p_squad_id: squadId,
+    });
+    return Boolean(!error && data?.success);
+  } catch (err) {
+    console.warn("acceptSquadLeadership error:", err);
+    return false;
+  }
+}
+
+export async function refuseSquadLeadership(squadId: string): Promise<boolean> {
+  if (!isSupabaseConfigured || !squadId) return false;
+  try {
+    const { data, error } = await supabase.rpc("refuse_squad_leadership", {
+      p_squad_id: squadId,
+    });
+    return Boolean(!error && data?.success);
+  } catch (err) {
+    console.warn("refuseSquadLeadership error:", err);
+    return false;
   }
 }
 
