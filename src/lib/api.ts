@@ -1806,8 +1806,24 @@ export async function submitSquadEstimate(
       console.warn("Error updating squad_members current_estimate:", smErr);
     }
 
-    // 2. Insert into box_estimates if mysteryBoxId is provided
-    if (mysteryBoxId) {
+    // 2. Resolve mysteryBoxId if not directly provided
+    let targetBoxId = mysteryBoxId;
+    if (!targetBoxId) {
+      const { data: activeBox } = await supabase
+        .from("mystery_boxes")
+        .select("id")
+        .eq("active", true)
+        .order("starts_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (activeBox?.id) {
+        targetBoxId = activeBox.id;
+      }
+    }
+
+    // 3. Upsert into box_estimates to trigger squad real-time notifications
+    if (targetBoxId) {
       const { data: memberEntry } = await supabase
         .from("squad_members")
         .select("id")
@@ -1815,9 +1831,9 @@ export async function submitSquadEstimate(
         .maybeSingle();
 
       if (memberEntry?.id) {
-        await supabase.from("box_estimates").upsert(
+        const { error: beErr } = await supabase.from("box_estimates").upsert(
           {
-            mystery_box_id: mysteryBoxId,
+            mystery_box_id: targetBoxId,
             squad_id: squadId,
             squad_member_id: memberEntry.id,
             user_id: userId,
@@ -1825,6 +1841,9 @@ export async function submitSquadEstimate(
           },
           { onConflict: "mystery_box_id, squad_member_id" }
         );
+        if (beErr) {
+          console.warn("Error upserting box_estimates:", beErr);
+        }
       }
     }
 
