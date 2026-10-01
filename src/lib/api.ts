@@ -1124,6 +1124,7 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
       .from("feed_posts")
       .select(`
         id,
+        user_id,
         photo_url,
         caption,
         city,
@@ -1204,6 +1205,7 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
 
         return {
           id: item.id,
+          userId: item.user_id || item.profiles?.id,
           author: isRecruit
             ? "VALUO Matchmaking"
             : item.is_official
@@ -1785,13 +1787,49 @@ export async function fetchUserFriends(userId: string): Promise<string[]> {
   return data.map((f: any) => f.profiles?.name).filter(Boolean);
 }
 
-export async function toggleFriendshipInDb(userId: string, friendId: string, isFriend: boolean) {
-  if (!isSupabaseConfigured) return;
+export async function toggleFriendshipInDb(userId: string, friendIdOrName: string, isFriend: boolean) {
+  if (!isSupabaseConfigured || !userId || !friendIdOrName) return;
 
-  if (isFriend) {
-    await supabase.from("friendships").delete().match({ user_id: userId, friend_id: friendId });
-  } else {
-    await supabase.from("friendships").insert({ user_id: userId, friend_id: friendId });
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(friendIdOrName);
+  let resolvedFriendId = isUuid ? friendIdOrName : null;
+
+  if (!resolvedFriendId) {
+    try {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("id")
+        .ilike("name", friendIdOrName.trim())
+        .limit(1)
+        .maybeSingle();
+
+      if (prof?.id) {
+        resolvedFriendId = prof.id;
+      } else {
+        const { data: postAuthor } = await supabase
+          .from("feed_posts")
+          .select("user_id")
+          .ilike("author", friendIdOrName.trim())
+          .limit(1)
+          .maybeSingle();
+        if (postAuthor?.user_id) {
+          resolvedFriendId = postAuthor.user_id;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not resolve profile name to UUID for friendship:", e);
+    }
+  }
+
+  if (!resolvedFriendId || resolvedFriendId === userId) return;
+
+  try {
+    if (isFriend) {
+      await supabase.from("friendships").delete().match({ user_id: userId, friend_id: resolvedFriendId });
+    } else {
+      await supabase.from("friendships").upsert({ user_id: userId, friend_id: resolvedFriendId });
+    }
+  } catch (err) {
+    console.error("toggleFriendshipInDb error:", err);
   }
 }
 

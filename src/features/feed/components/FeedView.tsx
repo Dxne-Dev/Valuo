@@ -39,7 +39,7 @@ export type FeedViewProps = {
   currentUser: UserProfile;
   challenge?: ChallengeData | null;
   onToggleLike: (id: number | string) => void;
-  onToggleFriend: (author: string) => void;
+  onToggleFriend: (author: string, targetUserId?: string) => void;
   onOpenComposer: () => void;
   onShare: (post: FeedPost) => void;
   onAddComment: (postId: number | string, text: string, parentId?: string | number | null) => void;
@@ -421,7 +421,7 @@ export default function FeedView({
                   {!isUser && !post.isOfficial && !post.isRecruitment && (
                     <button
                       type="button"
-                      onClick={() => onToggleFriend(post.author)}
+                      onClick={() => onToggleFriend(post.author, post.userId)}
                       className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold transition ${
                         isFriend
                           ? "border border-[#488262]/30 bg-[#eef7f2] text-[#3b7254] hover:bg-[#e0f0e7]"

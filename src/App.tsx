@@ -501,7 +501,7 @@ export default function App() {
     }
   }
 
-  async function toggleFriend(author: string) {
+  async function toggleFriend(author: string, targetUserId?: string) {
     const isFriend = friends.includes(author);
 
     if (isFriend) {
@@ -513,7 +513,7 @@ export default function App() {
     }
 
     if (userId) {
-      await toggleFriendshipInDb(userId, author, isFriend);
+      await toggleFriendshipInDb(userId, targetUserId || author, isFriend);
     }
   }
 

@@ -11,6 +11,7 @@ export type Comment = {
 
 export type FeedPost = {
   id: number | string;
+  userId?: string;
   author: string;
   city: string;
   avatar: string;
