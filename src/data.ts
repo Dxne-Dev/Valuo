@@ -3,6 +3,10 @@ export type Comment = {
   author: string;
   avatar: string;
   text: string;
+  parentId?: string | number | null;
+  replyToAuthor?: string | null;
+  createdAt?: string;
+  replies?: Comment[];
 };
 
 export type FeedPost = {
@@ -34,7 +38,7 @@ export type UserProfile = {
   isAdmin?: boolean;
 };
 
-export type NotificationType = "challenge" | "friend" | "like" | "comment" | "mystery";
+export type NotificationType = "challenge" | "friend" | "like" | "comment" | "reply" | "mystery" | "squad" | "admin" | "system";
 
 export type AppNotification = {
   id: string;
@@ -43,8 +47,9 @@ export type AppNotification = {
   message: string;
   time: string;
   read: boolean;
-  targetTab: "feed" | "game" | "group" | "profile" | "notifications";
-  targetPostId?: number;
+  targetTab: "feed" | "game" | "group" | "profile" | "notifications" | "admin";
+  targetPostId?: number | string;
+  actorId?: string;
   avatar?: string;
 };
 

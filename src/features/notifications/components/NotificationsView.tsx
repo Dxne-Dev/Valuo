@@ -2,11 +2,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
   CheckCheck,
+  CornerDownRight,
   Heart,
   MessageCircle,
   PackageOpen,
+  ShieldAlert,
   Sparkles,
   UserPlus,
+  Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { type AppNotification, type NotificationType } from "@/data";
@@ -18,7 +21,7 @@ export type NotificationsViewProps = {
   onClearAll?: () => void;
 };
 
-export type NotifFilter = "all" | "unread" | "social" | "game";
+export type NotifFilter = "all" | "unread" | "social" | "squad" | "game";
 
 export default function NotificationsView({
   notifications,
@@ -31,8 +34,9 @@ export default function NotificationsView({
 
   const filteredNotifs = useMemo(() => {
     if (filter === "unread") return notifications.filter((n) => !n.read);
-    if (filter === "social") return notifications.filter((n) => ["friend", "like", "comment"].includes(n.type));
-    if (filter === "game") return notifications.filter((n) => ["challenge", "mystery"].includes(n.type));
+    if (filter === "social") return notifications.filter((n) => ["friend", "like", "comment", "reply"].includes(n.type));
+    if (filter === "squad") return notifications.filter((n) => n.type === "squad");
+    if (filter === "game") return notifications.filter((n) => ["challenge", "mystery", "admin", "system"].includes(n.type));
     return notifications;
   }, [filter, notifications]);
 
@@ -44,10 +48,17 @@ export default function NotificationsView({
         return <Heart size={16} className="text-[#e9683a] fill-[#e9683a]" />;
       case "comment":
         return <MessageCircle size={16} className="text-[#488262]" />;
+      case "reply":
+        return <CornerDownRight size={16} className="text-[#e9683a]" />;
       case "friend":
         return <UserPlus size={16} className="text-[#2b6cb0]" />;
+      case "squad":
+        return <Users size={16} className="text-[#d9582d]" />;
       case "mystery":
         return <PackageOpen size={16} className="text-[#946914]" />;
+      case "admin":
+      case "system":
+        return <ShieldAlert size={16} className="text-[#e9683a]" />;
       default:
         return <Bell size={16} className="text-[#173f35]" />;
     }
@@ -61,10 +72,17 @@ export default function NotificationsView({
         return "bg-[#fff0eb]";
       case "comment":
         return "bg-[#edf7f2]";
+      case "reply":
+        return "bg-[#fff5ef]";
       case "friend":
         return "bg-[#ebf4ff]";
+      case "squad":
+        return "bg-[#fdf3ec]";
       case "mystery":
         return "bg-[#fbf4db]";
+      case "admin":
+      case "system":
+        return "bg-[#fee2e2]";
       default:
         return "bg-[#f5f0e5]";
     }
@@ -103,8 +121,9 @@ export default function NotificationsView({
         {[
           { id: "all" as const, label: "Toutes" },
           { id: "unread" as const, label: `Non lues (${unreadCount})` },
-          { id: "game" as const, label: "Défis & Mystery Box" },
-          { id: "social" as const, label: "Social & Amis" },
+          { id: "squad" as const, label: "Escouade" },
+          { id: "social" as const, label: "Social & Réponses" },
+          { id: "game" as const, label: "Défis & Jeu" },
         ].map((tab) => (
           <button
             key={tab.id}

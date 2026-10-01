@@ -18,6 +18,7 @@ import {
   type AppNotification,
   avatarPresets,
   avatars,
+  type Comment,
   type FeedPost,
   type GroupData,
   media,
@@ -539,6 +540,73 @@ export default function App() {
 
   const [leadershipModalOpen, setLeadershipModalOpen] = useState(false);
 
+  // Realtime subscription for notifications & live interactions
+  useEffect(() => {
+    if (!userId || !isSupabaseConfigured) return;
+
+    const userRealtimeChannel = supabase
+      .channel(`user_realtime_feed_${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload: any) => {
+          const newNotif = payload.new;
+          if (newNotif) {
+            setNotice(`🔔 ${newNotif.title} : ${newNotif.message}`);
+            fetchUserNotifications(userId).then((notifs) => {
+              if (notifs) setNotifications(notifs);
+            });
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "post_comments" },
+        () => {
+          fetchFeedPosts(userId).then((livePosts) => {
+            if (livePosts) setPosts(livePosts);
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "post_likes" },
+        () => {
+          fetchFeedPosts(userId).then((livePosts) => {
+            if (livePosts) setPosts(livePosts);
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "squad_members" },
+        () => {
+          fetchUserSquad(userId).then((sq) => {
+            if (sq) setGroup(sq);
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "squads" },
+        () => {
+          fetchUserSquad(userId).then((sq) => {
+            if (sq) setGroup(sq);
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(userRealtimeChannel);
+    };
+  }, [userId]);
+
   // Detect when current user is the pending leader
   useEffect(() => {
     if (group && userId && group.pendingLeaderId === userId) {
@@ -825,23 +893,44 @@ export default function App() {
     }
   }
 
-  async function addComment(postId: number | string, text: string) {
+  async function addComment(postId: number | string, text: string, parentId?: string | number | null) {
+    const newComment: Comment = {
+      id: `temp-${Date.now()}`,
+      author: currentUser.name.split(" ")[0],
+      avatar: currentUser.avatar,
+      text,
+      parentId: parentId || null,
+      replies: [],
+    };
+
     setPosts((current) =>
-      current.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              comments: [
-                ...post.comments,
-                { id: Date.now(), author: currentUser.name.split(" ")[0], avatar: currentUser.avatar, text },
-              ],
+      current.map((post) => {
+        if (post.id !== postId) return post;
+
+        if (parentId) {
+          const updatedComments = post.comments.map((c) => {
+            if (c.id === parentId) {
+              return {
+                ...c,
+                replies: [...(c.replies || []), newComment],
+              };
             }
-          : post,
-      ),
+            return c;
+          });
+          return { ...post, comments: updatedComments };
+        }
+
+        return {
+          ...post,
+          comments: [...post.comments, newComment],
+        };
+      }),
     );
 
     if (userId) {
-      await addPostComment(userId, postId, text);
+      await addPostComment(userId, postId, text, parentId);
+      const updatedPosts = await fetchFeedPosts(userId);
+      if (updatedPosts) setPosts(updatedPosts);
     }
   }
 

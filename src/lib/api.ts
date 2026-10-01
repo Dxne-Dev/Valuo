@@ -3,6 +3,7 @@ export { isSupabaseConfigured };
 import {
   type AppNotification,
   avatars,
+  type Comment,
   type FeedPost,
   type GroupData,
   type GroupMember,
@@ -1141,6 +1142,7 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
         post_comments (
           id,
           text,
+          parent_id,
           created_at,
           profiles:profiles!post_comments_user_id_fkey (
             name,
@@ -1161,12 +1163,36 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
           ? item.post_likes?.some((like: any) => like.user_id === currentUserId)
           : false;
 
-        const formattedComments = (item.post_comments || []).map((c: any) => ({
+        const rawComments = item.post_comments || [];
+        const authorMap = new Map<string, string>();
+        rawComments.forEach((c: any) => {
+          if (c.id) authorMap.set(String(c.id), c.profiles?.name || "Membre");
+        });
+
+        const allComments: Comment[] = rawComments.map((c: any) => ({
           id: c.id,
           author: c.profiles?.name || "Membre",
           avatar: c.profiles?.avatar_url || avatars.lea,
           text: c.text,
+          parentId: c.parent_id || null,
+          replyToAuthor: c.parent_id ? (authorMap.get(String(c.parent_id)) || null) : null,
+          createdAt: c.created_at,
+          replies: [],
         }));
+
+        const topLevelComments: Comment[] = [];
+        const commentById = new Map<string, Comment>();
+        allComments.forEach((c) => commentById.set(String(c.id), c));
+
+        allComments.forEach((c) => {
+          if (c.parentId && commentById.has(String(c.parentId))) {
+            const parent = commentById.get(String(c.parentId))!;
+            if (!parent.replies) parent.replies = [];
+            parent.replies.push(c);
+          } else {
+            topLevelComments.push(c);
+          }
+        });
 
         // Format relative time
         const diffMin = Math.max(1, Math.round((Date.now() - new Date(item.created_at).getTime()) / 60000));
@@ -1197,7 +1223,7 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
           isRecruitment: isRecruit,
           squadCode: recruitmentMatch ? recruitmentMatch[1] : undefined,
           squadName: recruitmentMatch ? recruitmentMatch[2] : undefined,
-          comments: formattedComments,
+          comments: topLevelComments,
         };
       });
     }
@@ -1309,7 +1335,12 @@ export async function togglePostLike(userId: string, postId: string | number, cu
   }
 }
 
-export async function addPostComment(userId: string, postId: string | number, text: string) {
+export async function addPostComment(
+  userId: string,
+  postId: string | number,
+  text: string,
+  parentId?: string | number | null,
+) {
   if (!isSupabaseConfigured) return null;
 
   const { data, error } = await supabase
@@ -1318,8 +1349,19 @@ export async function addPostComment(userId: string, postId: string | number, te
       user_id: userId,
       post_id: postId,
       text: sanitizeInput(text),
+      parent_id: parentId || null,
     })
-    .select()
+    .select(`
+      id,
+      text,
+      parent_id,
+      created_at,
+      profiles:profiles!post_comments_user_id_fkey (
+        id,
+        name,
+        avatar_url
+      )
+    `)
     .single();
 
   if (error) console.error("Error adding comment:", error);
@@ -1781,7 +1823,7 @@ export async function fetchUserNotifications(userId: string): Promise<AppNotific
 
   return data.map((n: any) => {
     const diffMin = Math.max(1, Math.round((Date.now() - new Date(n.created_at).getTime()) / 60000));
-    const timeStr = diffMin < 60 ? `Il y a ${diffMin} min` : `Il y a ${Math.round(diffMin / 60)} h`;
+    const timeStr = diffMin < 60 ? `Il y a ${diffMin} min` : diffMin < 1440 ? `Il y a ${Math.round(diffMin / 60)} h` : `Il y a ${Math.round(diffMin / 1440)} j`;
 
     return {
       id: n.id,
@@ -1792,6 +1834,7 @@ export async function fetchUserNotifications(userId: string): Promise<AppNotific
       read: n.read,
       targetTab: n.target_tab || "feed",
       targetPostId: n.target_post_id,
+      actorId: n.actor_id,
       avatar: n.profiles?.avatar_url,
     };
   });

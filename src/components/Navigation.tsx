@@ -4,16 +4,19 @@ import {
   Camera,
   CheckCheck,
   ChevronRight,
+  CornerDownRight,
   Heart,
   Home,
   LogOut,
   MessageCircle,
   PackageOpen,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Trophy,
   UserPlus,
   UserRound,
+  Users,
 } from "lucide-react";
 import { useState } from "react";
 import {
@@ -85,10 +88,17 @@ export function DesktopNavigation({
         return <Heart size={14} className="text-[#e9683a] fill-[#e9683a]" />;
       case "comment":
         return <MessageCircle size={14} className="text-[#488262]" />;
+      case "reply":
+        return <CornerDownRight size={14} className="text-[#e9683a]" />;
       case "friend":
         return <UserPlus size={14} className="text-[#2b6cb0]" />;
+      case "squad":
+        return <Users size={14} className="text-[#d9582d]" />;
       case "mystery":
         return <PackageOpen size={14} className="text-[#946914]" />;
+      case "admin":
+      case "system":
+        return <ShieldAlert size={14} className="text-[#e9683a]" />;
       default:
         return <Bell size={14} className="text-[#173f35]" />;
     }
@@ -102,10 +112,17 @@ export function DesktopNavigation({
         return "bg-[#fff0eb]";
       case "comment":
         return "bg-[#edf7f2]";
+      case "reply":
+        return "bg-[#fff5ef]";
       case "friend":
         return "bg-[#ebf4ff]";
+      case "squad":
+        return "bg-[#fdf3ec]";
       case "mystery":
         return "bg-[#fbf4db]";
+      case "admin":
+      case "system":
+        return "bg-[#fee2e2]";
       default:
         return "bg-[#f5f0e5]";
     }

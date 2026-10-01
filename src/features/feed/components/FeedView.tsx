@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Camera,
   Check,
+  CornerDownRight,
   Edit3,
   Flag,
   Flame,
@@ -14,6 +15,7 @@ import {
   Pin,
   PinOff,
   Radio,
+  Reply,
   Send,
   Share2,
   Sparkles,
@@ -40,7 +42,7 @@ export type FeedViewProps = {
   onToggleFriend: (author: string) => void;
   onOpenComposer: () => void;
   onShare: (post: FeedPost) => void;
-  onAddComment: (postId: number | string, text: string) => void;
+  onAddComment: (postId: number | string, text: string, parentId?: string | number | null) => void;
   onJoinSquad?: (code: string) => void;
   onDeletePost?: (postId: string | number) => void;
   onUpdatePost?: (postId: string | number, updates: { caption?: string; photo?: string }) => void;
@@ -71,6 +73,7 @@ export default function FeedView({
   const [filter, setFilter] = useState<FeedFilter>("recents");
   const [openComments, setOpenComments] = useState<number | string | null>(null);
   const [drafts, setDrafts] = useState<Record<string | number, string>>({});
+  const [replyingTo, setReplyingTo] = useState<Record<string | number, { commentId: string | number; authorName: string } | null>>({});
 
   // Dropdown menu & modals state
   const [activeMenuPostId, setActiveMenuPostId] = useState<string | number | null>(null);
@@ -185,8 +188,10 @@ export default function FeedView({
     event.preventDefault();
     const text = drafts[postId]?.trim();
     if (!text) return;
-    onAddComment(postId, text);
+    const currentReply = replyingTo[postId];
+    onAddComment(postId, text, currentReply?.commentId || null);
     setDrafts((current) => ({ ...current, [postId]: "" }));
+    setReplyingTo((current) => ({ ...current, [postId]: null }));
     setOpenComments(postId);
   }
 
@@ -628,17 +633,70 @@ export default function FeedView({
                         exit={{ height: 0, opacity: 0 }}
                         className="overflow-hidden"
                       >
-                        <div className="mt-4 space-y-3 border-t border-[#173f35]/8 pt-4">
+                        <div className="mt-4 space-y-3.5 border-t border-[#173f35]/8 pt-4">
                           {post.comments.length === 0 && (
                             <p className="text-xs text-[#8a958f]">Aucun commentaire pour l'instant.</p>
                           )}
                           {post.comments.map((comment) => (
-                            <div key={comment.id} className="flex items-start gap-2.5">
-                              <img src={comment.avatar} alt="" className="h-7 w-7 rounded-full object-cover" />
-                              <p className="rounded-2xl bg-[#f5f0e5] px-3 py-2 text-[13px] leading-relaxed text-[#4f6057]">
-                                <span className="font-extrabold text-[#173f35]">{comment.author} </span>
-                                {comment.text}
-                              </p>
+                            <div key={comment.id} className="space-y-2">
+                              {/* Top-level comment */}
+                              <div className="flex items-start gap-2.5 group/cmt">
+                                <img src={comment.avatar} alt="" className="h-7 w-7 rounded-full object-cover shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="inline-block rounded-2xl bg-[#f5f0e5] px-3.5 py-2 text-[13px] leading-relaxed text-[#4f6057]">
+                                    <span className="font-extrabold text-[#173f35]">{comment.author} </span>
+                                    {comment.text}
+                                  </div>
+                                  <div className="mt-1 flex items-center gap-3 pl-2 text-[11px] font-bold text-[#8a958f]">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setReplyingTo((prev) => ({
+                                          ...prev,
+                                          [post.id]: { commentId: comment.id, authorName: comment.author },
+                                        }));
+                                        setOpenComments(post.id);
+                                      }}
+                                      className="flex items-center gap-1 text-[#e9683a] hover:underline"
+                                    >
+                                      <Reply size={11} /> Répondre
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Nested replies */}
+                              {comment.replies && comment.replies.length > 0 && (
+                                <div className="ml-7 pl-3.5 border-l-2 border-[#173f35]/15 space-y-2 pt-1">
+                                  {comment.replies.map((reply) => (
+                                    <div key={reply.id} className="flex items-start gap-2">
+                                      <img src={reply.avatar} alt="" className="h-6 w-6 rounded-full object-cover shrink-0 mt-0.5" />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="inline-block rounded-2xl bg-[#eee8dc] px-3 py-1.5 text-[12px] leading-relaxed text-[#4f6057]">
+                                          <span className="font-extrabold text-[#173f35]">{reply.author} </span>
+                                          <span className="font-bold text-[#e9683a]">@{reply.replyToAuthor || comment.author} </span>
+                                          {reply.text}
+                                        </div>
+                                        <div className="mt-0.5 flex items-center gap-2 pl-2 text-[10px] font-bold text-[#8a958f]">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setReplyingTo((prev) => ({
+                                                ...prev,
+                                                [post.id]: { commentId: comment.id, authorName: reply.author },
+                                              }));
+                                              setOpenComments(post.id);
+                                            }}
+                                            className="flex items-center gap-1 text-[#e9683a] hover:underline"
+                                          >
+                                            <Reply size={10} /> Répondre
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -646,20 +704,38 @@ export default function FeedView({
                     )}
                   </AnimatePresence>
 
-                  <form onSubmit={(event) => submitComment(event, post.id)} className="mt-4 flex items-center gap-2">
-                    <img src={currentUser.avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
+                  {/* Active Reply Banner */}
+                  {replyingTo[post.id] && (
+                    <div className="mt-3 flex items-center justify-between rounded-xl bg-[#e9683a]/10 px-3.5 py-1.5 text-xs text-[#e9683a] font-bold border border-[#e9683a]/20">
+                      <span className="flex items-center gap-1.5">
+                        <CornerDownRight size={13} />
+                        Réponse à <span className="font-extrabold underline">@{replyingTo[post.id]?.authorName}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setReplyingTo((prev) => ({ ...prev, [post.id]: null }))}
+                        className="rounded-full p-0.5 hover:bg-[#e9683a]/20 transition"
+                        title="Annuler la réponse"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
+
+                  <form onSubmit={(event) => submitComment(event, post.id)} className="mt-3 flex items-center gap-2">
+                    <img src={currentUser.avatar} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
                     <input
                       value={drafts[post.id] ?? ""}
                       onChange={(event) => setDrafts((current) => ({ ...current, [post.id]: event.target.value }))}
                       onFocus={() => setOpenComments(post.id)}
-                      placeholder="Écrire un commentaire…"
+                      placeholder={replyingTo[post.id] ? `Répondre à @${replyingTo[post.id]?.authorName}…` : "Écrire un commentaire…"}
                       className="min-w-0 flex-1 rounded-full bg-[#f5f0e5] px-4 py-2.5 text-sm text-[#173f35] outline-none placeholder:text-[#8a958f] focus:ring-2 focus:ring-[#e9683a]/20"
                     />
                     <button
                       type="submit"
                       aria-label="Envoyer"
                       disabled={!drafts[post.id]?.trim()}
-                      className="grid h-9 w-9 place-items-center rounded-full bg-[#173f35] text-white transition hover:bg-[#245b4c] disabled:opacity-30"
+                      className="grid h-9 w-9 place-items-center rounded-full bg-[#173f35] text-white transition hover:bg-[#245b4c] disabled:opacity-30 shrink-0"
                     >
                       <Send size={14} />
                     </button>
