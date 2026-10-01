@@ -12,7 +12,7 @@ import { NotificationsView } from "@/features/notifications";
 import { OnboardingView } from "@/features/onboarding";
 import { ProfileView } from "@/features/profile";
 import Logo from "./components/Logo";
-import { getValuoCycleInfo } from "./lib/dateUtils";
+import { getCurrentWeekNumber, getValuoCycleInfo } from "./lib/dateUtils";
 
 import {
   type AppNotification,
@@ -591,7 +591,7 @@ export default function App() {
         id: `grp-${Date.now()}`,
         name,
         code: randomCode,
-        week: 38,
+        week: getCurrentWeekNumber(),
         members: [
           { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: 0, change: 0, estimate: null },
           ...invitedFriends.map((f, i) => ({
@@ -648,7 +648,7 @@ export default function App() {
         id: `grp-${Date.now()}`,
         name: `Escouade ${code}`,
         code,
-        week: 38,
+        week: getCurrentWeekNumber(),
         members: [
           { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: 0, change: 0, estimate: null },
         ],
@@ -725,7 +725,7 @@ export default function App() {
         id: `grp-${Date.now()}`,
         name: squadName,
         code: randomCode,
-        week: 38,
+        week: getCurrentWeekNumber(),
         members: [
           { id: 1, name: currentUser.name.split(" ")[0], avatar: currentUser.avatar, points: 0, change: 0, estimate: null },
         ],

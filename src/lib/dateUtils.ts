@@ -38,3 +38,7 @@ export function getValuoCycleInfo() {
     message,
   };
 }
+
+export function getCurrentWeekNumber(): number {
+  return getValuoCycleInfo().weekNumber;
+}

@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
+import { getCurrentWeekNumber } from "./dateUtils";
 
 export type AdminMetrics = {
   totalPlayers: number;
@@ -58,7 +59,7 @@ export async function fetchAdminSquadsList(): Promise<AdminSquadSummary[]> {
         id: "squad-demo",
         name: "Les As du Flair",
         code: "VALUO-482",
-        weekNumber: 38,
+        weekNumber: getCurrentWeekNumber(),
         membersCount: 4,
         topScore: 248,
       },
@@ -88,7 +89,7 @@ export async function fetchAdminSquadsList(): Promise<AdminSquadSummary[]> {
         id: s.id,
         name: s.name,
         code: s.code,
-        weekNumber: s.week_number || 38,
+        weekNumber: s.week_number || getCurrentWeekNumber(),
         membersCount: members.length,
         topScore,
       };

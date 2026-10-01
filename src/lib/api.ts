@@ -15,6 +15,7 @@ import {
   resetRateLimit,
   sanitizeInput,
 } from "./security";
+import { getCurrentWeekNumber } from "./dateUtils";
 
 // ============================================================================
 // 1. AUTHENTICATION & PROFILE
@@ -1432,7 +1433,7 @@ export async function fetchUserSquad(userId: string): Promise<GroupData | null> 
     id: squad.id,
     name: squad.name,
     code: squad.code,
-    week: squad.week_number || 38,
+    week: squad.week_number || getCurrentWeekNumber(),
     members,
     createdBy: squad.created_by,
     pendingLeaderId: squad.pending_leader_id,
@@ -1594,7 +1595,7 @@ export async function createSquadInDb(
       name: sanitizeInput(squadName),
       code,
       created_by: userId,
-      week_number: 38,
+      week_number: getCurrentWeekNumber(),
       status: "active",
     })
     .select()

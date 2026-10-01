@@ -54,6 +54,7 @@ import {
   updateFeedPost,
   uploadImage,
 } from "../services/adminService";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useCountdown } from "@/lib/useCountdown";
 
 function ChallengeCountdownBadge({ endsAt }: { endsAt?: string }) {
@@ -279,6 +280,36 @@ export default function AdminView({
 
   useEffect(() => {
     loadAdminData();
+
+    if (!isSupabaseConfigured) return;
+
+    const adminRealtimeChannel = supabase
+      .channel("admin_realtime_dashboard")
+      .on("postgres_changes", { event: "*", schema: "public", table: "squads" }, () => {
+        loadAdminData();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "squad_members" }, () => {
+        loadAdminData();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
+        loadAdminData();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "feed_posts" }, () => {
+        loadAdminData();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "challenges" }, () => {
+        loadChallenges();
+        loadAdminData();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "mystery_boxes" }, () => {
+        loadMysteryBoxes();
+        loadAdminData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(adminRealtimeChannel);
+    };
   }, [posts.length]);
 
   // Handle Challenge CRUD & Scheduling

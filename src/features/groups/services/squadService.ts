@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { type GroupData, type GroupMember, avatars } from "@/data";
 import { sanitizeInput } from "@/lib/security";
+import { getCurrentWeekNumber } from "@/lib/dateUtils";
 import {
   createFeedPost,
   saveActiveRecruitmentLocalCache,
@@ -61,7 +62,7 @@ export async function fetchUserSquad(userId: string): Promise<GroupData | null> 
     id: squad.id,
     name: squad.name,
     code: squad.code,
-    week: squad.week_number || 38,
+    week: squad.week_number || getCurrentWeekNumber(),
     members,
   };
 }
@@ -194,7 +195,7 @@ export async function createSquadInDb(
       name: sanitizeInput(squadName),
       code,
       created_by: userId,
-      week_number: 38,
+      week_number: getCurrentWeekNumber(),
       status: "active",
     })
     .select()

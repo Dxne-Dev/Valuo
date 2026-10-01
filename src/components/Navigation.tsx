@@ -22,6 +22,7 @@ import {
   type NotificationType,
   type UserProfile,
 } from "../data";
+import { getCurrentWeekNumber } from "@/lib/dateUtils";
 import Logo from "./Logo";
 
 export type Tab = "feed" | "game" | "group" | "profile" | "notifications" | "admin";
@@ -51,7 +52,7 @@ export function DesktopNavigation({
   profile,
   notifications,
   dayNumber = 1,
-  weekNumber = 38,
+  weekNumber = getCurrentWeekNumber(),
   cycleMessage = "Élimination de l'escouade samedi à 20 h.",
   onNavigate,
   onLogout,
