@@ -17,9 +17,9 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { type FormEvent, useState } from "react";
-import { type GroupData, media, type UserProfile } from "@/data";
-import type { MysteryItemData } from "@/lib/api";
+import { type FormEvent, useEffect, useState } from "react";
+import { type GroupData, type UserProfile } from "@/data";
+import { fetchAllMysteryBoxesList, type MysteryItemData } from "@/lib/api";
 
 export type GroupViewProps = {
   group: GroupData | null;
@@ -55,6 +55,15 @@ export default function GroupView({
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [hoveredHistoryIndex, setHoveredHistoryIndex] = useState<number | null>(null);
+  const [weeklyMysteryBoxes, setWeeklyMysteryBoxes] = useState<MysteryItemData[]>([]);
+
+  useEffect(() => {
+    fetchAllMysteryBoxesList().then((list) => {
+      if (list && list.length > 0) {
+        setWeeklyMysteryBoxes(list);
+      }
+    });
+  }, []);
 
   function handleCreate(event: FormEvent) {
     event.preventDefault();
@@ -396,24 +405,18 @@ export default function GroupView({
                       {daysConfig.map((day, idx) => {
                         const isPast = idx < activeDayIndex;
                         const isToday = idx === activeDayIndex;
+                        const dayNum = idx + 1;
 
-                        const mysteryItems = [
-                          { day: 1, name: "Poste radio vintage années 60", photo: media.radio, price: "85 €" },
-                          { day: 2, name: "Appareil photo argentique", photo: media.camera, price: "120 €" },
-                          { day: 3, name: "Lampe de bureau industrielle", photo: media.desk, price: "95 €" },
-                          { day: 4, name: "Vase en faïence floral", photo: media.mystery, price: "68 €" },
-                          { day: 5, name: "Téléphone à cadran rotatif", photo: media.redPhone, price: "110 €" },
-                          { day: 6, name: "Paire de figurines céramique", photo: media.figurines, price: "75 €" },
-                        ];
-                        const defaultItemData = mysteryItems[idx] || mysteryItems[0];
-                        const itemData = isToday && mysteryItem
-                          ? {
-                              day: idx + 1,
-                              name: mysteryItem.title || defaultItemData.name,
-                              photo: mysteryItem.image || defaultItemData.photo,
-                              price: `${mysteryItem.realPrice || 68} €`,
-                            }
-                          : defaultItemData;
+                        const matchedBox =
+                          (isToday && mysteryItem) ||
+                          weeklyMysteryBoxes.find((b) => b.dayNumber === dayNum);
+
+                        const hasBox = Boolean(matchedBox && matchedBox.image);
+                        const boxTitle = matchedBox?.title || `Mystery Box ${day.name}`;
+                        const boxPhoto = matchedBox?.image;
+                        const formattedPrice = matchedBox?.realPrice
+                          ? `${Number(matchedBox.realPrice).toLocaleString("fr-FR")} FCFA`
+                          : "Non renseigné";
 
                         if (isToday) {
                           return (
@@ -425,7 +428,7 @@ export default function GroupView({
                             >
                               <div className="flex items-center gap-3">
                                 <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#e9683a] font-display text-lg font-semibold text-white">
-                                  J{idx + 1}
+                                  J{dayNum}
                                 </div>
                                 <div>
                                   <p className="text-sm font-extrabold text-[#173f35]">{day.name} · Mystery Box du jour</p>
@@ -433,12 +436,14 @@ export default function GroupView({
                                 </div>
                               </div>
 
-                              <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[#e9683a] shadow-sm border border-[#e9683a]/20">
-                                <Eye size={11} /> Aperçu
-                              </span>
+                              {hasBox && (
+                                <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[#e9683a] shadow-sm border border-[#e9683a]/20">
+                                  <Eye size={11} /> Aperçu
+                                </span>
+                              )}
 
                               <AnimatePresence>
-                                {hoveredHistoryIndex === idx && (
+                                {hoveredHistoryIndex === idx && hasBox && boxPhoto && (
                                   <motion.div
                                     initial={{ opacity: 0, scale: 0.9, y: 8 }}
                                     animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -448,16 +453,16 @@ export default function GroupView({
                                   >
                                     <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-[#d9d0bf]">
                                       <img
-                                        src={itemData.photo}
-                                        alt={itemData.name}
+                                        src={boxPhoto}
+                                        alt={boxTitle}
                                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                                       />
                                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                                       <div className="absolute bottom-2 left-2 right-2 text-white">
                                         <p className="text-[9px] font-extrabold uppercase tracking-wider text-[#f3c969]">
-                                          Mystery Box J{idx + 1}
+                                          Mystery Box J{dayNum}
                                         </p>
-                                        <p className="truncate text-xs font-bold">{itemData.name}</p>
+                                        <p className="truncate text-xs font-bold">{boxTitle}</p>
                                       </div>
                                     </div>
                                     <div className="flex items-center justify-between px-1.5 pt-2 text-[11px] font-bold text-[#173f35]">
@@ -475,26 +480,32 @@ export default function GroupView({
                           return (
                             <div
                               key={`hist-${day.short}-${idx}`}
-                              onMouseEnter={() => setHoveredHistoryIndex(idx)}
+                              onMouseEnter={() => hasBox && setHoveredHistoryIndex(idx)}
                               onMouseLeave={() => setHoveredHistoryIndex(null)}
                               className="relative group flex items-center justify-between gap-3 rounded-2xl border border-[#173f35]/8 bg-white p-4 transition-all duration-200 hover:border-[#173f35]/25 hover:shadow-md cursor-pointer"
                             >
                               <div className="flex items-center gap-3">
                                 <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#f3c969]/30 font-display text-lg font-semibold text-[#173f35]">
-                                  J{idx + 1}
+                                  J{dayNum}
                                 </div>
                                 <div>
-                                  <p className="text-sm font-extrabold text-[#173f35]">{day.name}</p>
-                                  <p className="text-xs text-[#76837c]">Manche clôturée</p>
+                                  <p className="text-sm font-extrabold text-[#173f35]">
+                                    {day.name} {hasBox ? `· ${boxTitle}` : ""}
+                                  </p>
+                                  <p className="text-xs text-[#76837c]">
+                                    {hasBox ? `Manche clôturée · ${formattedPrice}` : "Manche clôturée"}
+                                  </p>
                                 </div>
                               </div>
 
-                              <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-[#fbf8f1] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[#76837c] group-hover:text-[#173f35] group-hover:bg-[#f5f0e5] transition border border-[#173f35]/8">
-                                <Eye size={11} /> Voir
-                              </span>
+                              {hasBox && (
+                                <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-[#fbf8f1] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[#76837c] group-hover:text-[#173f35] group-hover:bg-[#f5f0e5] transition border border-[#173f35]/8">
+                                  <Eye size={11} /> Voir
+                                </span>
+                              )}
 
                               <AnimatePresence>
-                                {hoveredHistoryIndex === idx && (
+                                {hoveredHistoryIndex === idx && hasBox && boxPhoto && (
                                   <motion.div
                                     initial={{ opacity: 0, scale: 0.9, y: 8 }}
                                     animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -504,21 +515,21 @@ export default function GroupView({
                                   >
                                     <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-[#d9d0bf]">
                                       <img
-                                        src={itemData.photo}
-                                        alt={itemData.name}
+                                        src={boxPhoto}
+                                        alt={boxTitle}
                                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                                       />
                                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                                       <div className="absolute bottom-2 left-2 right-2 text-white">
                                         <p className="text-[9px] font-extrabold uppercase tracking-wider text-[#f3c969]">
-                                          Manche clôturée J{idx + 1}
+                                          Manche clôturée J{dayNum}
                                         </p>
-                                        <p className="truncate text-xs font-bold">{itemData.name}</p>
+                                        <p className="truncate text-xs font-bold">{boxTitle}</p>
                                       </div>
                                     </div>
                                     <div className="flex items-center justify-between px-1.5 pt-2 text-[11px] font-bold text-[#173f35]">
                                       <span className="text-[#76837c]">Prix réel</span>
-                                      <span className="font-extrabold text-[#173f35]">{itemData.price}</span>
+                                      <span className="font-extrabold text-[#173f35]">{formattedPrice}</span>
                                     </div>
                                   </motion.div>
                                 )}
