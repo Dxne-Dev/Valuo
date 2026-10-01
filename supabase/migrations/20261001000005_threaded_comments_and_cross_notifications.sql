@@ -227,7 +227,14 @@ CREATE TRIGGER trigger_squad_member_notification
     AFTER INSERT ON public.squad_members
     FOR EACH ROW EXECUTE FUNCTION public.handle_squad_member_notification();
 
--- 8. REALTIME REPLICATION FOR NOTIFICATIONS
+-- 8. REALTIME REPLICATION FOR NOTIFICATIONS & TABLES
+ALTER TABLE public.notifications REPLICA IDENTITY FULL;
+ALTER TABLE public.post_comments REPLICA IDENTITY FULL;
+ALTER TABLE public.post_likes REPLICA IDENTITY FULL;
+ALTER TABLE public.feed_posts REPLICA IDENTITY FULL;
+ALTER TABLE public.squad_members REPLICA IDENTITY FULL;
+ALTER TABLE public.squads REPLICA IDENTITY FULL;
+
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -235,5 +242,19 @@ BEGIN
         WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'notifications'
     ) THEN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'post_comments'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.post_comments;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'post_likes'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.post_likes;
     END IF;
 END $$;

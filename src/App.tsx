@@ -540,12 +540,53 @@ export default function App() {
 
   const [leadershipModalOpen, setLeadershipModalOpen] = useState(false);
 
-  // Realtime subscription for notifications & live interactions
+  // 1. Realtime subscription for Public Feed (comments, likes, posts)
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const publicFeedChannel = supabase
+      .channel("public_feed_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "post_comments" },
+        () => {
+          // Live sync feed posts immediately
+          fetchFeedPosts(userId || undefined).then((livePosts) => {
+            if (livePosts && livePosts.length > 0) setPosts(livePosts);
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "post_likes" },
+        () => {
+          fetchFeedPosts(userId || undefined).then((livePosts) => {
+            if (livePosts && livePosts.length > 0) setPosts(livePosts);
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "feed_posts" },
+        () => {
+          fetchFeedPosts(userId || undefined).then((livePosts) => {
+            if (livePosts && livePosts.length > 0) setPosts(livePosts);
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(publicFeedChannel);
+    };
+  }, [userId]);
+
+  // 2. Realtime subscription for Private User Notifications & Squad
   useEffect(() => {
     if (!userId || !isSupabaseConfigured) return;
 
     const userRealtimeChannel = supabase
-      .channel(`user_realtime_feed_${userId}`)
+      .channel(`user_private_realtime_${userId}`)
       .on(
         "postgres_changes",
         {
@@ -558,28 +599,22 @@ export default function App() {
           const newNotif = payload.new;
           if (newNotif) {
             setNotice(`🔔 ${newNotif.title} : ${newNotif.message}`);
+            const instantNotif: AppNotification = {
+              id: newNotif.id,
+              type: newNotif.type,
+              title: newNotif.title,
+              message: newNotif.message,
+              time: "À l'instant",
+              read: false,
+              targetTab: newNotif.target_tab || "feed",
+              targetPostId: newNotif.target_post_id,
+              actorId: newNotif.actor_id,
+            };
+            setNotifications((prev) => [instantNotif, ...prev.filter((n) => n.id !== newNotif.id)]);
             fetchUserNotifications(userId).then((notifs) => {
               if (notifs) setNotifications(notifs);
             });
           }
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "post_comments" },
-        () => {
-          fetchFeedPosts(userId).then((livePosts) => {
-            if (livePosts) setPosts(livePosts);
-          });
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "post_likes" },
-        () => {
-          fetchFeedPosts(userId).then((livePosts) => {
-            if (livePosts) setPosts(livePosts);
-          });
         },
       )
       .on(

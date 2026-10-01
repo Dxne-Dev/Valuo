@@ -20,6 +20,7 @@ export type FeedPost = {
   likes: number;
   liked?: boolean;
   comments: Comment[];
+  commentsCount?: number;
   isPinned?: boolean;
   isOfficial?: boolean;
   isRecruitment?: boolean;

@@ -351,6 +351,8 @@ export default function FeedView({
             const isFriend = friends.includes(post.author);
             const isMenuOpen = activeMenuPostId === post.id;
 
+            const totalComments = post.commentsCount ?? post.comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0);
+
             return (
               <motion.article
                 key={post.id}
@@ -596,7 +598,7 @@ export default function FeedView({
                       onClick={() => setOpenComments(commentsOpen ? null : post.id)}
                       className="flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-bold text-[#607168] transition hover:text-[#173f35]"
                     >
-                      <MessageCircle size={20} /> {post.comments.length}
+                      <MessageCircle size={20} /> {totalComments}
                     </button>
                     <button
                       type="button"
@@ -615,13 +617,13 @@ export default function FeedView({
                     </p>
                   )}
 
-                  {post.comments.length > 0 && !commentsOpen && (
+                  {totalComments > 0 && !commentsOpen && (
                     <button
                       type="button"
                       onClick={() => setOpenComments(post.id)}
                       className="mt-2 text-xs font-bold text-[#8a958f] hover:text-[#173f35]"
                     >
-                      Voir les {post.comments.length} commentaire{post.comments.length > 1 ? "s" : ""}
+                      Voir les {totalComments} commentaire{totalComments > 1 ? "s" : ""}
                     </button>
                   )}
 

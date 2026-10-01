@@ -1224,6 +1224,7 @@ export async function fetchFeedPosts(currentUserId?: string): Promise<FeedPost[]
           squadCode: recruitmentMatch ? recruitmentMatch[1] : undefined,
           squadName: recruitmentMatch ? recruitmentMatch[2] : undefined,
           comments: topLevelComments,
+          commentsCount: rawComments.length,
         };
       });
     }
